@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attempting: {{ exam.exam_title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .exam-container { width: 100%; min-height: 100vh; background: var(--background); display: flex; flex-direction: column; }
+        
+        .exam-header {
+            background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border);
+            padding: 16px 40px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 20;
+        }
+        
+        .exam-title-bar h2 { font-size: 20px; font-weight: 700; color: var(--text-main); }
+        .timer-box { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); padding: 8px 20px; border-radius: 8px; font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 10px;}
+        .timer-box.warning { animation: pulse 1s infinite alternate; background: #ef4444; color: white;}
+        @keyframes pulse { from { opacity: 0.8; } to { opacity: 1; transform: scale(1.02); } }
+
+        .exam-content { flex: 1; padding: 40px; max-width: 800px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; }
+
+        .question-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); margin-bottom: 24px; position: relative;}
+        
+        .question-number { position: absolute; top: -16px; left: 32px; background: var(--primary); color: white; padding: 4px 16px; border-radius: 20px; font-weight: 700; font-size: 14px; box-shadow: 0 2px 4px rgba(79, 70, 229, 0.3); }
+        .question-text { font-size: 18px; font-weight: 600; color: var(--text-main); margin-bottom: 24px; margin-top: 8px;}
+        
+        .options-wrapper { display: flex; flex-direction: column; gap: 12px; }
+        
+        .custom-radio { position: relative; display: flex; align-items: center; gap: 16px; cursor: pointer; padding: 16px 20px; border: 2px solid var(--border); border-radius: 12px; transition: var(--transition); background: var(--input-bg); }
+        .custom-radio:hover { border-color: rgba(79, 70, 229, 0.3); background: rgba(79, 70, 229, 0.02); }
+        
+        .custom-radio input[type="radio"] { display: none; }
+        
+        .radio-indicator { width: 20px; height: 20px; border: 2px solid var(--text-muted); border-radius: 50%; display: flex; justify-content: center; align-items: center; transition: var(--transition); }
+        .radio-indicator::after { content: ""; width: 10px; height: 10px; background: var(--primary); border-radius: 50%; transform: scale(0); transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        
+        .custom-radio input[type="radio"]:checked + .radio-indicator { border-color: var(--primary); }
+        .custom-radio input[type="radio"]:checked + .radio-indicator::after { transform: scale(1); }
+        .custom-radio input[type="radio"]:checked { border-color: var(--primary); }
+        
+        /* The entire label border becomes active */
+        .custom-radio:has(input[type="radio"]:checked) { border-color: var(--primary); background: rgba(79, 70, 229, 0.05); }
+
+        .option-text { font-size: 16px; color: var(--text-main); font-weight: 500; }
+
+        .nav-buttons { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
+        .btn-nav { padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: var(--transition); border: none; display: flex; align-items: center; gap: 8px; }
+        
+        .btn-prev { background: white; border: 1px solid var(--border); color: var(--text-main); }
+        .btn-prev:hover:not(:disabled) { background: var(--input-bg); border-color: var(--text-muted); }
+        .btn-prev:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .btn-next { background: var(--primary); color: white; }
+        .btn-next:hover { background: var(--primary-hover); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25); }
+
+        .progress-bar-container { width: 100%; height: 6px; background: var(--border); position: relative; }
+        .progress-bar { height: 100%; background: var(--primary); width: 0%; transition: width 0.3s ease; }
+
+        /* Loader */
+        .loader-screen { position: absolute; top:0; left:0; width: 100%; height: 100vh; background: var(--background); display: flex; justify-content: center; align-items: center; z-index: 100; flex-direction: column; gap: 20px; }
+        .spinner { width: 40px; height: 40px; border: 4px solid rgba(79, 70, 229, 0.2); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s infinite linear; }
+    </style>
+</head>
+<body>
+    <div id="loader" class="loader-screen">
+        <div class="spinner"></div>
+        <h3 style="color: var(--text-main);">Loading Exam Papers...</h3>
+    </div>
+
+    <div class="progress-bar-container">
+        <div id="progress" class="progress-bar"></div>
+    </div>
+
+    <div class="exam-container" style="display: none;" id="exam-ui">
+        <header class="exam-header">
+            <div class="exam-title-bar">
+                <h2 style="display: flex; align-items: center; gap: 12px;">{{ exam.exam_title }} <span style="background: rgba(79, 70, 229, 0.1); color: var(--primary); padding: 4px 10px; border-radius: 12px; font-size: 12px; text-transform: uppercase; font-weight: 700;">{{ exam.subject }}</span></h2>
+            </div>
+            <div class="timer-box" id="timer">
+                <i class="fas fa-hourglass-start"></i> <span id="time-display">00:00:00</span>
+            </div>
+        </header>
+
+        <main class="exam-content">
+            <div class="question-panel">
+                <div class="question-number" id="q-counter">Question 1 of ?</div>
+                
+                <p class="question-text" id="q-text">Loading...</p>
+                
+                <div class="options-wrapper" id="options-container">
+                    <!-- Options injected via JS -->
+                </div>
+            </div>
+
+            <div class="nav-buttons">
+                <button class="btn-nav btn-prev" id="btn-prev" disabled><i class="fas fa-arrow-left"></i> Previous</button>
+                <button class="btn-nav btn-next" id="btn-next">Next <i class="fas fa-arrow-right"></i></button>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const examId = "{{ exam.exam_id }}";
+        const timeLimitMinutes = parseInt("{{ exam.time_limit_minutes }}", 10);
+        
+        let questions = [];
+        let currentIndex = 0;
+        let answers = {}; // { question_id: 'A' }
+        let timerInterval;
+        let timeRemaining = timeLimitMinutes * 60; // in seconds
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const res = await fetch(`/api/student/exams/${examId}/questions`);
+                const data = await res.json();
+                
+                if (data.questions && data.questions.length > 0) {
+                    questions = data.questions;
+                    initExam();
+                } else {
+                    alert('No questions found for this exam. Contact admin.');
+                    window.location.href = '/student/dashboard';
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Failed to load exam. Please try again.');
+            }
+        });
+
+        function initExam() {
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('exam-ui').style.display = 'flex';
+            
+            // Start Timer
+            updateTimerDisplay();
+            timerInterval = setInterval(() => {
+                timeRemaining--;
+                updateTimerDisplay();
+                if (timeRemaining <= 0) {
+                    clearInterval(timerInterval);
+                    autoSubmit();
+                }
+            }, 1000);
+
+            // Bind Nav Buttons
+            document.getElementById('btn-prev').addEventListener('click', () => {
+                if (currentIndex > 0) {
+                    saveAnswer();
+                    currentIndex--;
+                    renderQuestion();
+                }
+            });
+
+            document.getElementById('btn-next').addEventListener('click', () => {
+                saveAnswer();
+                if (currentIndex < questions.length - 1) {
+                    currentIndex++;
+                    renderQuestion();
+                } else {
+                    // It's the submit button
+                    submitExam();
+                }
+            });
+
+            renderQuestion();
+        }
+
+        function renderQuestion() {
+            const q = questions[currentIndex];
+            document.getElementById('q-counter').textContent = `Question ${currentIndex + 1} of ${questions.length}`;
+            document.getElementById('q-text').textContent = q.question_text;
+            
+            const container = document.getElementById('options-container');
+            container.innerHTML = ''; // clear
+
+            const options = [
+                { id: 'A', text: q.option_a },
+                { id: 'B', text: q.option_b },
+                { id: 'C', text: q.option_c },
+                { id: 'D', text: q.option_d }
+            ];
+
+            const savedAnswer = answers[q.question_id];
+
+            options.forEach(opt => {
+                const label = document.createElement('label');
+                label.className = 'custom-radio';
+                
+                const input = document.createElement('input');
+                input.type = 'radio';
+                input.name = `question_${q.question_id}`;
+                input.value = opt.id;
+                if (savedAnswer === opt.id) input.checked = true;
+
+                const indicator = document.createElement('div');
+                indicator.className = 'radio-indicator';
+                
+                const text = document.createElement('span');
+                text.className = 'option-text';
+                text.textContent = opt.text;
+
+                label.appendChild(input);
+                label.appendChild(indicator);
+                label.appendChild(text);
+
+                container.appendChild(label);
+            });
+
+            // Update Progress Bar
+            const progress = ((currentIndex) / questions.length) * 100;
+            document.getElementById('progress').style.width = `${progress}%`;
+
+            // Update Nav Buttons
+            document.getElementById('btn-prev').disabled = currentIndex === 0;
+            
+            const btnNext = document.getElementById('btn-next');
+            if (currentIndex === questions.length - 1) {
+                btnNext.innerHTML = 'Submit Exam <i class="fas fa-check"></i>';
+                btnNext.style.background = '#10b981'; // Green for submit
+                btnNext.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.25)';
+            } else {
+                btnNext.innerHTML = 'Next <i class="fas fa-arrow-right"></i>';
+                btnNext.style.background = 'var(--primary)';
+            }
+        }
+
+        function saveAnswer() {
+            const q = questions[currentIndex];
+            const selected = document.querySelector(`input[name="question_${q.question_id}"]:checked`);
+            if (selected) {
+                answers[q.question_id] = selected.value;
+            }
+        }
+
+        function updateTimerDisplay() {
+            const h = Math.floor(timeRemaining / 3600).toString().padStart(2, '0');
+            const m = Math.floor((timeRemaining % 3600) / 60).toString().padStart(2, '0');
+            const s = (timeRemaining % 60).toString().padStart(2, '0');
+            
+            const display = document.getElementById('time-display');
+            display.textContent = timeLimitMinutes > 60 ? `${h}:${m}:${s}` : `${m}:${s}`;
+            
+            const timerBox = document.getElementById('timer');
+            if (timeRemaining <= 60 && !timerBox.classList.contains('warning')) {
+                timerBox.classList.add('warning'); // turn red & pulse last 60s
+            }
+        }
+
+        async function submitExam() {
+            saveAnswer();
+            if (!confirm('Are you sure you want to finish and submit the exam?')) return;
+            await sendSubmission();
+        }
+
+        async function autoSubmit() {
+            saveAnswer();
+            alert('Time is up! Submitting exam automatically.');
+            await sendSubmission();
+        }
+
+        async function sendSubmission() {
+            document.getElementById('loader').style.display = 'flex';
+            document.getElementById('loader').innerHTML = '<div class="spinner" style="border-top-color: #10b981;"></div><h3 style="color: var(--text-main);">Evaluating Answers...</h3>';
+            
+            try {
+                const res = await fetch(`/api/student/exams/${examId}/submit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ answers })
+                });
+                const data = await res.json();
+                
+                if (res.ok) {
+                    window.location.href = `/student/results/${examId}`; // Result page redirect
+                } else {
+                    alert(data.error || 'Submission failed');
+                    window.location.href = '/student/dashboard';
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Network error during submission.');
+            }
+        }
+    </script>
+</body>
+</html>

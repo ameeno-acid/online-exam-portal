@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Questions - {{ exam.exam_title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .dashboard-container { display: flex; width: 100%; height: 100vh; background: var(--background); }
+        .sidebar { width: 250px; background: var(--surface); border-right: 1px solid var(--border); padding: 20px 0; display: flex; flex-direction: column; z-index: 10; }
+        .sidebar-header { padding: 0 20px 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+        .sidebar-header h2 { font-size: 20px; color: var(--admin-color); }
+        .nav-link { padding: 15px 20px; color: var(--text-muted); text-decoration: none; display: flex; align-items: center; gap: 12px; font-weight: 500; transition: var(--transition); }
+        .nav-link:hover, .nav-link.active { color: var(--admin-color); background: rgba(15, 23, 42, 0.05); border-right: 4px solid var(--admin-color); }
+        .main-content { flex: 1; padding: 40px; overflow-y: auto; z-index: 10; }
+        .top-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; }
+        .back-link { color: var(--text-muted); text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; margin-bottom: 20px; transition: var(--transition); }
+        .back-link:hover { color: var(--primary); }
+        
+        .panel { background: var(--surface); padding: 24px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border: 1px solid var(--border); margin-bottom: 24px;}
+        .panel h3 { margin-bottom: 20px; color: var(--admin-color); font-size: 18px; }
+        
+        /* Form Styles */
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .input-group label { display: block; font-size: 14px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; }
+        .input-field-normal { width: 100%; height: 44px; background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 0 16px; font-size: 15px; outline: none; transition: var(--transition); }
+        .input-field-normal:focus { border-color: var(--primary); background: var(--surface); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1); }
+        select.input-field-normal { appearance: none; cursor: pointer; }
+
+        /* Questions List */
+        .question-card { background: var(--background); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; position: relative; }
+        .question-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+        .question-text { font-weight: 600; font-size: 16px; color: var(--admin-color); margin: 0; padding-right: 40px;}
+        .options-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .option-item { background: var(--surface); border: 1px solid var(--border); padding: 10px 16px; border-radius: 8px; font-size: 14px; }
+        .option-item.correct { border-color: #10b981; background: rgba(16, 185, 129, 0.05); color: #047857; font-weight: 600; }
+        
+        .btn-delete { position: absolute; top: 16px; right: 16px; color: #ef4444; background: none; border: none; cursor: pointer; padding: 8px; border-radius: 4px; transition: var(--transition); }
+        .btn-delete:hover { background: rgba(239, 68, 68, 0.1); }
+    </style>
+</head>
+<body class="admin-mode">
+    <div class="background-blobs">
+        <img src="{{ url_for('static', filename='assets/blob.svg') }}" class="blob blob-1" alt="">
+        <img src="{{ url_for('static', filename='assets/blob.svg') }}" class="blob blob-2" alt="">
+    </div>
+
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header"><h2>Admin Portal</h2></div>
+            <a href="/admin/dashboard" class="nav-link"><i class="fas fa-home"></i> Dashboard</a>
+            <a href="/admin/exams" class="nav-link active"><i class="fas fa-file-alt"></i> Manage Exams</a>
+            <a href="/admin/students" class="nav-link"><i class="fas fa-users"></i> Manage Students</a>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <a href="/admin/exams" class="back-link"><i class="fas fa-arrow-left"></i> Back to Exams</a>
+            
+            <div class="top-header">
+                <div>
+                    <h1>{{ exam.exam_title }}</h1>
+                    <p style="color: var(--text-muted); margin-top: 8px;">Questions: {{ exam.total_questions }} | Time Limit: {{ exam.time_limit_minutes }} mins</p>
+                </div>
+            </div>
+
+            <!-- Add Question Panel -->
+            <div class="panel">
+                <h3>Add New Question</h3>
+                <form id="add-question-form">
+                    <div class="input-group" style="margin-bottom: 20px;">
+                        <label for="q-text">Question Text</label>
+                        <input type="text" id="q-text" class="input-field-normal" required placeholder="Enter the question here...">
+                    </div>
+                    
+                    <div class="form-grid">
+                        <div class="input-group">
+                            <label for="opt-a">Option A</label>
+                            <input type="text" id="opt-a" class="input-field-normal" required placeholder="First option">
+                        </div>
+                        <div class="input-group">
+                            <label for="opt-b">Option B</label>
+                            <input type="text" id="opt-b" class="input-field-normal" required placeholder="Second option">
+                        </div>
+                        <div class="input-group">
+                            <label for="opt-c">Option C</label>
+                            <input type="text" id="opt-c" class="input-field-normal" required placeholder="Third option">
+                        </div>
+                        <div class="input-group">
+                            <label for="opt-d">Option D</label>
+                            <input type="text" id="opt-d" class="input-field-normal" required placeholder="Fourth option">
+                        </div>
+                    </div>
+
+                    <div class="input-group" style="margin-bottom: 20px; width: 50%;">
+                        <label for="correct-opt">Correct Option</label>
+                        <select id="correct-opt" class="input-field-normal" required>
+                            <option value="" disabled selected>Select correct option...</option>
+                            <option value="A">Option A</option>
+                            <option value="B">Option B</option>
+                            <option value="C">Option C</option>
+                            <option value="D">Option D</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="submit-btn btn-admin" style="width: 200px; height: 44px;">Add Question</button>
+                </form>
+            </div>
+
+            <!-- Existing Questions -->
+            <div class="panel">
+                <h3>Question Bank</h3>
+                {% for q in questions %}
+                <div class="question-card">
+                    <button class="btn-delete" title="Delete Question" onclick="deleteQuestion('{{ q.question_id }}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                    <div class="question-header">
+                        <p class="question-text">{{ loop.index }}. {{ q.question_text }}</p>
+                    </div>
+                    <ul class="options-list">
+                        <li class="option-item {% if q.correct_option == 'A' %}correct{% endif %}">A. {{ q.option_a }}</li>
+                        <li class="option-item {% if q.correct_option == 'B' %}correct{% endif %}">B. {{ q.option_b }}</li>
+                        <li class="option-item {% if q.correct_option == 'C' %}correct{% endif %}">C. {{ q.option_c }}</li>
+                        <li class="option-item {% if q.correct_option == 'D' %}correct{% endif %}">D. {{ q.option_d }}</li>
+                    </ul>
+                </div>
+                {% else %}
+                <p style="color: var(--text-muted); text-align: center; padding: 20px;">No questions added yet.</p>
+                {% endfor %}
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const examId = "{{ exam.exam_id }}";
+
+        document.getElementById('add-question-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const data = {
+                question_text: document.getElementById('q-text').value,
+                option_a: document.getElementById('opt-a').value,
+                option_b: document.getElementById('opt-b').value,
+                option_c: document.getElementById('opt-c').value,
+                option_d: document.getElementById('opt-d').value,
+                correct_option: document.getElementById('correct-opt').value
+            };
+
+            try {
+                const res = await fetch(`/api/admin/exams/${examId}/questions`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await res.json();
+                if(res.ok) {
+                    window.location.reload();
+                } else {
+                    alert(result.error || 'Failed to add question');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('An error occurred.');
+            }
+        });
+
+        async function deleteQuestion(qId) {
+            if(!confirm('Delete this question permanently?')) return;
+            
+            try {
+                const res = await fetch(`/api/admin/questions/${qId}`, { method: 'DELETE' });
+                const result = await res.json();
+                if(res.ok) {
+                    window.location.reload();
+                } else {
+                    alert(result.error || 'Failed to delete question');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('An error occurred.');
+            }
+        }
+    </script>
+</body>
+</html>

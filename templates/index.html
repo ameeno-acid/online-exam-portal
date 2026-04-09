@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online Exam Portal - Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="background-blobs">
+        <img src="{{ url_for('static', filename='assets/blob.svg') }}" class="blob blob-1" alt="">
+        <img src="{{ url_for('static', filename='assets/blob.svg') }}" class="blob blob-2" alt="">
+        <img src="{{ url_for('static', filename='assets/blob.svg') }}" class="blob blob-3" alt="">
+    </div>
+
+    <div class="container">
+        <!-- Landing Graphic & Text -->
+        <div class="landing-content">
+            <div class="landing-text">
+                <h2>Assess, Learn, Excel.</h2>
+                <p>Your ultimate destination for secure and interactive online examinations.</p>
+            </div>
+            <img src="{{ url_for('static', filename='assets/exam_illustration.png') }}" alt="Online Exam Portal Illustration" class="landing-graphic">
+        </div>
+
+        <div class="auth-box">
+            <!-- Role Toggle -->
+            <div class="role-toggle" data-role="student">
+                <button class="toggle-btn active" id="btn-student" onclick="switchRole('student')">Student</button>
+                <button class="toggle-btn" id="btn-admin" onclick="switchRole('admin')">Admin</button>
+                <div class="toggle-slider"></div>
+            </div>
+
+            <!-- Header -->
+            <div class="form-header">
+                <h1 id="auth-title" style="transition: opacity 0.2s ease;">Student Login</h1>
+                <p id="auth-subtitle" style="transition: opacity 0.2s ease;">Welcome back! Please enter your details.</p>
+            </div>
+
+            <!-- Forms Container -->
+            <div class="forms-wrapper">
+                <!-- Student Login Form -->
+                <form id="form-student-login" class="form active-form" action="javascript:void(0);">
+                    <div class="input-group">
+                        <input type="email" id="student-email" class="input-field" placeholder=" " required>
+                        <label for="student-email" class="floating-label">Email address</label>
+                    </div>
+                    <div class="input-group">
+                        <input type="password" id="student-password" class="input-field" placeholder=" " required>
+                        <label for="student-password" class="floating-label">Password</label>
+                    </div>
+                    <div class="options-group">
+                        <label class="remember-me">
+                            <input type="checkbox"> Remember me
+                        </label>
+                        <a href="#" class="forgot-link">Forgot password?</a>
+                    </div>
+                    <button type="submit" class="submit-btn">Login as Student</button>
+                    <div class="switch-form-text">
+                        Don't have an account? <a href="#" onclick="switchAction('register')">Sign Up</a>
+                    </div>
+                </form>
+
+                <!-- Student Registration Form -->
+                <form id="form-student-register" class="form hidden-form" action="javascript:void(0);">
+                    <div class="input-group">
+                        <input type="text" id="reg-name" class="input-field" placeholder=" " required>
+                        <label for="reg-name" class="floating-label">Full Name</label>
+                    </div>
+                    <div class="input-group">
+                        <input type="email" id="reg-email" class="input-field" placeholder=" " required>
+                        <label for="reg-email" class="floating-label">Email address</label>
+                    </div>
+                    <div class="input-group">
+                        <input type="password" id="reg-password" class="input-field" placeholder=" " required>
+                        <label for="reg-password" class="floating-label">Password</label>
+                    </div>
+                    <button type="submit" class="submit-btn btn-secondary">Create Account</button>
+                    <div class="switch-form-text">
+                        Already have an account? <a href="#" onclick="switchAction('login')">Log In</a>
+                    </div>
+                </form>
+
+                <!-- Admin Login Form -->
+                <form id="form-admin-login" class="form hidden-form" action="javascript:void(0);">
+                    <div class="input-group">
+                        <input type="email" id="admin-login-email" class="input-field" placeholder=" " required>
+                        <label for="admin-login-email" class="floating-label">Admin Email</label>
+                    </div>
+                    <div class="input-group">
+                        <input type="password" id="admin-login-password" class="input-field" placeholder=" " required>
+                        <label for="admin-login-password" class="floating-label">Password</label>
+                    </div>
+                    <div class="options-group">
+                        <label class="remember-me">
+                            <input type="checkbox"> Remember me
+                        </label>
+                        <a href="#" class="forgot-link">Forgot password?</a>
+                    </div>
+                    <button type="submit" class="submit-btn btn-admin">Login as Admin</button>
+                    <div class="switch-form-text">
+                        Don't have an admin account? <a href="#" onclick="switchAction('admin-register')">Register</a>
+                    </div>
+                </form>
+
+                <!-- Admin Registration Form -->
+                <form id="form-admin-register" class="form hidden-form" action="javascript:void(0);">
+                    <div class="input-group">
+                        <input type="text" id="reg-admin-name" class="input-field" placeholder=" " required>
+                        <label for="reg-admin-name" class="floating-label">Full Name</label>
+                    </div>
+                    <div class="input-group">
+                        <input type="email" id="reg-admin-email" class="input-field" placeholder=" " required>
+                        <label for="reg-admin-email" class="floating-label">Admin Email</label>
+                    </div>
+                    <div class="input-group">
+                        <input type="password" id="reg-admin-password" class="input-field" placeholder=" " required>
+                        <label for="reg-admin-password" class="floating-label">Password</label>
+                    </div>
+                    <button type="submit" class="submit-btn btn-admin">Create Admin Account</button>
+                    <div class="switch-form-text">
+                        Already have an admin account? <a href="#" onclick="switchAction('login')">Log In</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

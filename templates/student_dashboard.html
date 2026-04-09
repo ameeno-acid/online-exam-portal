@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Dashboard - Online Exam Portal</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .dashboard-container { display: flex; width: 100%; height: 100vh; background: var(--background); flex-direction: column; }
+        
+        .top-navbar {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 20;
+            position: sticky;
+            top: 0;
+        }
+        
+        .brand { font-size: 20px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 10px; }
+        .user-menu { display: flex; align-items: center; gap: 20px; }
+        .greeting { font-weight: 500; color: var(--text-muted); }
+        .btn-logout { background: transparent; border: 1px solid #ef4444; color: #ef4444; padding: 8px 16px; border-radius: 8px; cursor: pointer; transition: var(--transition); font-weight: 600; display: flex; align-items: center; gap: 8px;}
+        .btn-logout:hover { background: #ef4444; color: white; }
+
+        .main-content {
+            flex: 1;
+            padding: 40px;
+            overflow-y: auto;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+            z-index: 10;
+        }
+
+        .section-title { font-size: 24px; font-weight: 700; color: var(--text-main); margin-bottom: 24px; display: flex; align-items: center; gap: 10px; }
+        
+        .exam-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; margin-bottom: 40px; }
+        
+        .exam-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            transition: var(--transition);
+            display: flex;
+            flex-direction: column;
+        }
+        .exam-card:hover { transform: translateY(-4px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); border-color: var(--primary); }
+        
+        .exam-card h3 { font-size: 18px; color: var(--text-main); margin-bottom: 8px; }
+        .exam-card p.desc { font-size: 14px; color: var(--text-muted); margin-bottom: 16px; flex: 1; min-height: 40px; }
+        
+        .exam-meta { display: flex; gap: 16px; margin-bottom: 20px; font-size: 14px; color: var(--text-muted); }
+        .exam-meta span { display: flex; align-items: center; gap: 6px; }
+        
+        .btn-start { background: var(--primary); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; transition: var(--transition); display: block; }
+        .btn-start:hover { background: var(--primary-hover); transform: translateY(-2px); }
+        
+        .subject-badge { background: rgba(79, 70, 229, 0.1); color: var(--primary); padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+        .filter-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text-muted); padding: 8px 16px; border-radius: 20px; cursor: pointer; transition: var(--transition); font-weight: 600; }
+        .filter-btn.active, .filter-btn:hover { background: var(--primary); color: white; border-color: var(--primary); }
+        
+        /* Results Table */
+        .panel { background: var(--surface); padding: 24px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border: 1px solid var(--border); margin-bottom: 40px;}
+        .table-responsive { width: 100%; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 16px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { color: var(--text-muted); font-weight: 600; font-size: 14px; }
+        td { font-size: 15px; color: var(--text-main); }
+        
+        .score-pill { background: rgba(16, 185, 129, 0.1); color: #059669; padding: 6px 12px; border-radius: 20px; font-weight: 700; font-size: 14px; display: inline-block; }
+    </style>
+</head>
+<body>
+    <div class="background-blobs">
+        <img src="{{ url_for('static', filename='assets/blob.svg') }}" class="blob blob-1" alt="">
+        <img src="{{ url_for('static', filename='assets/blob.svg') }}" class="blob blob-3" alt="">
+    </div>
+
+    <div class="dashboard-container">
+        <!-- Top Navbar -->
+        <nav class="top-navbar">
+            <div class="brand">
+                <i class="fas fa-graduation-cap"></i> Exam Portal
+            </div>
+            <div class="user-menu">
+                <span class="greeting">Welcome, {{ name }}</span>
+                <button id="logout-btn" class="btn-logout">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </button>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <h2 class="section-title"><i class="fas fa-clipboard-list" style="color: var(--primary);"></i> Available Exams</h2>
+            
+            <div class="category-filters" style="margin-bottom: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
+                <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="Physics">Physics</button>
+                <button class="filter-btn" data-filter="Chemistry">Chemistry</button>
+                <button class="filter-btn" data-filter="Computer Science">Computer Science</button>
+            </div>
+            
+            <div class="exam-grid">
+                {% for exam in available_exams %}
+                <div class="exam-card" data-subject="{{ exam.subject }}">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                        <h3 style="margin: 0;">{{ exam.exam_title }}</h3>
+                        <span class="subject-badge">{{ exam.subject }}</span>
+                    </div>
+                    <p class="desc">{{ exam.description or "No description provided." }}</p>
+                    <div class="exam-meta">
+                        <span><i class="fas fa-question-circle"></i> {{ exam.total_questions }} Qs</span>
+                        <span><i class="fas fa-clock"></i> {{ exam.time_limit_minutes }} min</span>
+                    </div>
+                    <a href="/student/exams/{{ exam.exam_id }}" class="btn-start">Start Exam</a>
+                </div>
+                {% else %}
+                <div style="grid-column: 1 / -1; background: var(--surface); padding: 40px; text-align: center; border-radius: 16px; border: 1px dashed var(--border);">
+                    <i class="fas fa-box-open" style="font-size: 40px; color: var(--border); margin-bottom: 16px;"></i>
+                    <p style="color: var(--text-muted);">No new exams available at the moment.</p>
+                </div>
+                {% endfor %}
+            </div>
+
+            <h2 class="section-title"><i class="fas fa-history" style="color: var(--primary);"></i> Attempted Exams & Results</h2>
+            <div class="panel">
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Exam Title</th>
+                                <th>Score</th>
+                                <th>Questions</th>
+                                <th>Date Submitted</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for attempt in attempted_exams %}
+                            <tr>
+                                <td><strong>{{ attempt.exam_title }}</strong></td>
+                                <td><span class="score-pill">{{ attempt.score }} / {{ attempt.total_questions }}</span></td>
+                                <td>{{ attempt.total_questions }}</td>
+                                <td>{{ attempt.submitted_at }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" style="text-align: center; color: var(--text-muted);">You haven't attempted any exams yet.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        document.getElementById('logout-btn').addEventListener('click', async () => {
+            const res = await fetch('/api/logout', { method: 'POST' });
+            if(res.ok) window.location.href = '/';
+        });
+
+        // Filter Logic
+        const filterBtns = document.querySelectorAll('.filter-btn');
+        const examCards = document.querySelectorAll('.exam-card');
+
+        filterBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Update active state
+                filterBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                // Filter cards
+                const filterValue = btn.getAttribute('data-filter');
+                examCards.forEach(card => {
+                    if (filterValue === 'all' || card.getAttribute('data-subject') === filterValue) {
+                        card.style.display = 'flex';
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

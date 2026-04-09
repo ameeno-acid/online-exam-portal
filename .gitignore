@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+database.db
+project_source_code.zip
+.vscode/
+*.code-workspace
+instance/
