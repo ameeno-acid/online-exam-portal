@@ -63,6 +63,7 @@
             <a href="/admin/dashboard" class="nav-link"><i class="fas fa-home"></i> Dashboard</a>
             <a href="/admin/exams" class="nav-link active"><i class="fas fa-file-alt"></i> Manage Exams</a>
             <a href="/admin/students" class="nav-link"><i class="fas fa-users"></i> Manage Students</a>
+            <a href="/admin/reopen_requests" class="nav-link"><i class="fas fa-undo"></i> Reopen Requests</a>
             <a href="#" class="nav-link logout-btn" id="logout-btn"><i class="fas fa-sign-out-alt"></i> Logout</a>
         </aside>
 
@@ -85,15 +86,31 @@
                             <label for="subject">Subject</label>
                             <select id="subject" class="input-field-normal" required>
                                 <option value="" disabled selected>Select Subject</option>
-                                <option value="Physics">Physics</option>
-                                <option value="Chemistry">Chemistry</option>
-                                <option value="Computer Science">Computer Science</option>
-                                <option value="General">General</option>
+                                {% for sub in subjects %}
+                                <option value="{{ sub }}">{{ sub }}</option>
+                                {% endfor %}
                             </select>
+                            <button type="button" onclick="document.getElementById('subject-modal').style.display='flex'" style="margin-top: 8px; background: transparent; color: var(--primary); border: none; font-size: 13px; font-weight: bold; cursor: pointer;"><i class="fas fa-plus"></i> Add New Subject</button>
                         </div>
                         <div class="input-group">
                             <label for="time-limit">Time Limit (Minutes)</label>
                             <input type="number" id="time-limit" class="input-field-normal" required min="1" placeholder="e.g. 60">
+                        </div>
+                        <div class="input-group">
+                            <label for="difficulty">Difficulty</label>
+                            <select id="difficulty" class="input-field-normal" required>
+                                <option value="Easy">Easy</option>
+                                <option value="Medium" selected>Medium</option>
+                                <option value="Hard">Hard</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label for="start-date">Start Date & Time</label>
+                            <input type="datetime-local" id="start-date" class="input-field-normal" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="end-date">End Date & Time</label>
+                            <input type="datetime-local" id="end-date" class="input-field-normal" required>
                         </div>
                     </div>
                     <div class="input-group" style="margin-bottom: 20px;">
@@ -113,9 +130,10 @@
                             <tr>
                                 <th>Exam Title</th>
                                 <th>Subject</th>
+                                <th>Difficulty</th>
                                 <th>Time Limit</th>
                                 <th>Total Questions</th>
-                                <th>Created Date</th>
+                                <th>Active Window</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -124,9 +142,13 @@
                             <tr>
                                 <td><strong>{{ exam.exam_title }}</strong></td>
                                 <td><span style="background: rgba(79, 70, 229, 0.1); color: var(--primary); padding: 4px 8px; border-radius: 4px; font-size: 13px; font-weight: 600;">{{ exam.subject }}</span></td>
+                                <td>{{ exam.difficulty }}</td>
                                 <td>{{ exam.time_limit_minutes }} mins</td>
                                 <td>{{ exam.total_questions }}</td>
-                                <td>{{ exam.created_at[:10] }}</td>
+                                <td style="font-size: 13px;">
+                                    <div style="color: #10b981"><i class="fas fa-play" style="font-size: 10px;"></i> {{ exam.start_date.replace('T', ' ') if exam.start_date else 'N/A' }}</div>
+                                    <div style="color: #ef4444"><i class="fas fa-stop" style="font-size: 10px;"></i> {{ exam.end_date.replace('T', ' ') if exam.end_date else 'N/A' }}</div>
+                                </td>
                                 <td style="display: flex; gap: 10px;">
                                     <a href="/admin/exams/{{ exam.exam_id }}/questions" class="btn-action">
                                         <i class="fas fa-list"></i> Manage Questions
@@ -148,54 +170,74 @@
         </main>
     </div>
 
+    <!-- Add Subject Modal -->
+    <div id="subject-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:100; justify-content:center; align-items:center;">
+        <div style="background:var(--surface); padding:30px; border-radius:16px; width:100%; max-width:400px; box-shadow:0 10px 25px rgba(0,0,0,0.2);">
+            <h3 style="margin-bottom:16px;">Add New Subject</h3>
+            <input type="text" id="new-subject-name" class="input-field-normal" placeholder="e.g. Mathematics" style="margin-bottom: 16px;">
+            <button onclick="addSubject()" class="submit-btn btn-admin" style="width:100%;">Create Subject</button>
+            <button onclick="document.getElementById('subject-modal').style.display='none'" style="width:100%; background:transparent; color:var(--text-muted); border: none; margin-top: 8px; cursor:pointer; font-weight:bold;">Cancel</button>
+        </div>
+    </div>
+
     <script>
-        document.getElementById('logout-btn').addEventListener('click', async (e) => {
-            e.preventDefault();
-            const res = await fetch('/api/logout', { method: 'POST' });
-            if(res.ok) window.location.href = '/';
-        });
+        async function addSubject() {
+            const subject_name = document.getElementById('new-subject-name').value;
+            if(!subject_name) return alert('Enter a subject name');
+            
+            const res = await fetch('/api/admin/subjects', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ subject_name })
+            });
+            const data = await res.json();
+            if(res.ok) {
+                window.location.reload();
+            } else {
+                alert(data.error);
+            }
+        }
 
         document.getElementById('create-exam-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const title = document.getElementById('exam-title').value;
             const subject = document.getElementById('subject').value;
             const time_limit = document.getElementById('time-limit').value;
+            const difficulty = document.getElementById('difficulty').value;
             const description = document.getElementById('description').value;
+            const start_date = document.getElementById('start-date').value;
+            const end_date = document.getElementById('end-date').value;
 
-            try {
-                const res = await fetch('/api/admin/exams', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title, subject, time_limit, description })
-                });
+            const res = await fetch('/api/admin/exams', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title, subject, time_limit, difficulty, description, start_date, end_date })
+            });
+
+            if (res.ok) {
+                window.location.reload();
+            } else {
                 const data = await res.json();
-                if(res.ok) {
-                    window.location.reload();
-                } else {
-                    alert(data.error || 'Failed to create exam');
-                }
-            } catch (err) {
-                console.error(err);
-                alert('An error occurred.');
+                alert(data.error);
             }
         });
 
-        async function deleteExam(id, title) {
-            if(!confirm(`Are you sure you want to delete the exam '${title}'? This will delete all associated questions and student results forever.`)) return;
+        async function deleteExam(exam_id, exam_title) {
+            if(!confirm(`Are you sure you want to delete "${exam_title}"? This cannot be undone.`)) return;
             
-            try {
-                const res = await fetch(`/api/admin/exams/${id}`, { method: 'DELETE' });
-                const data = await res.json();
-                if(res.ok) {
-                    window.location.reload();
-                } else {
-                    alert(data.error || 'Failed to delete exam');
-                }
-            } catch (err) {
-                console.error(err);
-                alert('An error occurred.');
+            const res = await fetch(`/api/admin/exams/${exam_id}`, { method: 'DELETE' });
+            if(res.ok) {
+                window.location.reload();
+            } else {
+                alert('Failed to delete exam');
             }
         }
+
+        document.getElementById('logout-btn').addEventListener('click', async (e) => {
+            e.preventDefault();
+            const res = await fetch('/api/logout', { method: 'POST' });
+            if(res.ok) window.location.href = '/';
+        });
     </script>
 </body>
 </html>

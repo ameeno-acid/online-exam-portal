@@ -53,7 +53,7 @@
                         <label class="remember-me">
                             <input type="checkbox"> Remember me
                         </label>
-                        <a href="#" class="forgot-link">Forgot password?</a>
+                        <a href="#" class="forgot-link" onclick="document.getElementById('forgot-modal').style.display='flex'">Forgot password?</a>
                     </div>
                     <button type="submit" class="submit-btn">Login as Student</button>
                     <div class="switch-form-text">
@@ -95,7 +95,7 @@
                         <label class="remember-me">
                             <input type="checkbox"> Remember me
                         </label>
-                        <a href="#" class="forgot-link">Forgot password?</a>
+                        <a href="#" class="forgot-link" onclick="document.getElementById('forgot-modal').style.display='flex'">Forgot password?</a>
                     </div>
                     <button type="submit" class="submit-btn btn-admin">Login as Admin</button>
                     <div class="switch-form-text">
@@ -125,6 +125,58 @@
             </div>
         </div>
     </div>
+    
+    <!-- Forgot Password Modal -->
+    <div id="forgot-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:100; justify-content:center; align-items:center;">
+        <div style="background:var(--surface); padding:40px; border-radius:16px; width:100%; max-width:400px; box-shadow:0 10px 25px rgba(0,0,0,0.2);">
+            
+            <div id="forgot-step-1">
+                <h3 style="margin-bottom:8px;">Forgot Password</h3>
+                <p style="font-size:14px; color:var(--text-muted); margin-bottom:24px;">Enter your email to receive a secure reset link.</p>
+                <input type="email" id="forgot-email" class="input-field" style="background:var(--input-bg); border:1px solid var(--border); padding:16px; width:100%; border-radius:8px; margin-bottom:16px;" placeholder="Email Address" required>
+                <button onclick="requestReset()" class="submit-btn" style="width:100%; margin-bottom: 8px;">Send Reset Link</button>
+                <button onclick="closeForgotModal()" style="width:100%; background:transparent; color:var(--text-muted); border:1px solid var(--border); padding:16px; border-radius:8px; cursor:pointer; font-weight:bold;">Cancel</button>
+            </div>
+            
+            <p id="forgot-msg" style="text-align: center; margin-top: 16px; color: var(--text-muted); font-size: 14px; font-weight: 500;"></p>
+        </div>
+    </div>
+
+    <script>
+        function closeForgotModal() {
+            document.getElementById('forgot-modal').style.display = 'none';
+            document.getElementById('forgot-msg').textContent = '';
+            document.getElementById('forgot-email').value = '';
+        }
+
+        async function requestReset() {
+            const email = document.getElementById('forgot-email').value;
+            const msg = document.getElementById('forgot-msg');
+            if(!email) return alert('Enter email');
+            
+            msg.textContent = 'Processing request...';
+            msg.style.color = 'var(--text-muted)';
+            
+            try {
+                const res = await fetch('/api/forgot-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                const data = await res.json();
+                
+                msg.textContent = data.success || data.error;
+                msg.style.color = res.ok ? '#10b981' : '#ef4444';
+                
+                if(res.ok) {
+                    setTimeout(closeForgotModal, 5000);
+                }
+            } catch (err) {
+                msg.textContent = "Network error. Please try again.";
+                msg.style.color = '#ef4444';
+            }
+        }
+    </script>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

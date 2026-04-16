@@ -104,9 +104,9 @@
             
             <div class="category-filters" style="margin-bottom: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
                 <button class="filter-btn active" data-filter="all">All</button>
-                <button class="filter-btn" data-filter="Physics">Physics</button>
-                <button class="filter-btn" data-filter="Chemistry">Chemistry</button>
-                <button class="filter-btn" data-filter="Computer Science">Computer Science</button>
+                {% for sub in subjects %}
+                <button class="filter-btn" data-filter="{{ sub }}">{{ sub }}</button>
+                {% endfor %}
             </div>
             
             <div class="exam-grid">
@@ -114,14 +114,33 @@
                 <div class="exam-card" data-subject="{{ exam.subject }}">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
                         <h3 style="margin: 0;">{{ exam.exam_title }}</h3>
-                        <span class="subject-badge">{{ exam.subject }}</span>
+                        <div style="display: flex; gap: 8px;">
+                            <span class="subject-badge" style="background: rgba(16, 185, 129, 0.1); color: #10b981;">{{ exam.difficulty }}</span>
+                            <span class="subject-badge">{{ exam.subject }}</span>
+                        </div>
                     </div>
                     <p class="desc">{{ exam.description or "No description provided." }}</p>
-                    <div class="exam-meta">
+                    <div class="exam-meta" style="margin-bottom: 20px;">
                         <span><i class="fas fa-question-circle"></i> {{ exam.total_questions }} Qs</span>
                         <span><i class="fas fa-clock"></i> {{ exam.time_limit_minutes }} min</span>
                     </div>
-                    <a href="/student/exams/{{ exam.exam_id }}" class="btn-start">Start Exam</a>
+                    {% if exam.start_date and exam.start_date > current_time %}
+                        <div style="background: rgba(245, 158, 11, 0.1); color: #d97706; padding: 12px; border-radius: 8px; text-align: center; font-weight: 600;">Not Started Yet<br><span style="font-size: 12px; font-weight: normal;">Starts: {{ exam.start_date.replace('T', ' ') }}</span></div>
+                    {% elif exam.end_date and exam.end_date < current_time %}
+                        <div style="background: rgba(239, 68, 68, 0.1); color: #ef4444; padding: 12px; border-radius: 8px; text-align: center; font-weight: 600; margin-bottom: 8px;">Expired <br><span style="font-size: 12px; font-weight: normal;">Ended: {{ exam.end_date.replace('T', ' ') }}</span></div>
+                        {% set req = reopen_requests.get(exam.exam_id) %}
+                        {% if not req %}
+                            <button class="btn-start" style="background: var(--surface); color: var(--text-main); border: 1px solid var(--border);" onclick="openReopenModal({{ exam.exam_id }}, '{{ exam.exam_title }}')">Request Reopen</button>
+                        {% elif req.status == 'pending' %}
+                            <button class="btn-start" disabled style="background: rgba(245, 158, 11, 0.1); color: #d97706; cursor: not-allowed;">Request Pending</button>
+                        {% elif req.status == 'rejected' %}
+                            <button class="btn-start" disabled style="background: rgba(239, 68, 68, 0.1); color: #ef4444; cursor: not-allowed;">Request Rejected</button>
+                        {% elif req.status == 'approved' %}
+                            <a href="/student/exams/{{ exam.exam_id }}" class="btn-start" style="background: #10b981;">Start Exam (Approved)</a>
+                        {% endif %}
+                    {% else %}
+                        <a href="/student/exams/{{ exam.exam_id }}" class="btn-start">Start Exam</a>
+                    {% endif %}
                 </div>
                 {% else %}
                 <div style="grid-column: 1 / -1; background: var(--surface); padding: 40px; text-align: center; border-radius: 16px; border: 1px dashed var(--border);">
@@ -138,22 +157,37 @@
                         <thead>
                             <tr>
                                 <th>Exam Title</th>
+                                <th>Difficulty</th>
                                 <th>Score</th>
                                 <th>Questions</th>
                                 <th>Date Submitted</th>
+                                <th>Request Reopen</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for attempt in attempted_exams %}
                             <tr>
                                 <td><strong>{{ attempt.exam_title }}</strong></td>
+                                <td><span style="font-size:13px; font-weight:700; color:var(--text-muted);">{{ attempt.difficulty }}</span></td>
                                 <td><span class="score-pill">{{ attempt.score }} / {{ attempt.total_questions }}</span></td>
                                 <td>{{ attempt.total_questions }}</td>
-                                <td>{{ attempt.submitted_at }}</td>
+                                <td>{{ attempt.submitted_at[:16] }}</td>
+                                <td>
+                                    {% set req = reopen_requests.get(attempt.exam_id) %}
+                                    {% if not req %}
+                                        <button class="filter-btn" style="font-size: 12px; padding: 6px 12px;" onclick="openReopenModal({{ attempt.exam_id }}, '{{ attempt.exam_title }}')">Request</button>
+                                    {% elif req.status == 'pending' %}
+                                        <span style="background: rgba(245, 158, 11, 0.1); color: #d97706; padding: 4px 8px; border-radius: 4px; font-size: 13px; font-weight: 600;">Pending</span>
+                                    {% elif req.status == 'rejected' %}
+                                        <span style="background: rgba(239, 68, 68, 0.1); color: #ef4444; padding: 4px 8px; border-radius: 4px; font-size: 13px; font-weight: 600;">Rejected</span>
+                                    {% elif req.status == 'approved' %}
+                                        <a href="/student/exams/{{ attempt.exam_id }}" class="score-pill" style="text-decoration: none; background: rgba(16, 185, 129, 0.1); color: #10b981;"><i class="fas fa-play"></i> Re-take</a>
+                                    {% endif %}
+                                </td>
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="4" style="text-align: center; color: var(--text-muted);">You haven't attempted any exams yet.</td>
+                                <td colspan="6" style="text-align: center; color: var(--text-muted);">You haven't attempted any exams yet.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -161,6 +195,37 @@
                 </div>
             </div>
         </main>
+    </div>
+
+    <!-- Reopen Request Modal -->
+    <div id="reopen-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:100; justify-content:center; align-items:center;">
+        <div style="background:var(--surface); padding:30px; border-radius:16px; width:100%; max-width:450px; box-shadow:0 10px 25px rgba(0,0,0,0.2);">
+            <h3 style="margin-bottom:16px; color:var(--text-main);">Request Exam Reopen</h3>
+            <p style="color:var(--text-muted); font-size:14px; margin-bottom:20px;">Exam: <strong id="modal-exam-title"></strong></p>
+            
+            <form id="reopen-form">
+                <input type="hidden" id="modal-exam-id">
+                <div style="margin-bottom:16px;">
+                    <label style="display:block; font-size:14px; font-weight:600; color:var(--text-muted); margin-bottom:8px;">Reason</label>
+                    <select id="modal-reason" required style="width:100%; height:44px; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:0 16px; font-size:15px; outline:none;">
+                        <option value="" disabled selected>Select a reason...</option>
+                        <option value="Missed Exam">Missed Exam due to valid reason</option>
+                        <option value="Technical Issues">Technical Issues</option>
+                        <option value="Timeout">Auto-submitted due to Timeout</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div style="margin-bottom:24px;">
+                    <label style="display:block; font-size:14px; font-weight:600; color:var(--text-muted); margin-bottom:8px;">Details (Optional)</label>
+                    <textarea id="modal-description" style="width:100%; height:80px; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px 16px; font-size:14px; outline:none; resize:vertical;" placeholder="Please provide additional information..."></textarea>
+                </div>
+                
+                <div style="display:flex; gap:12px;">
+                    <button type="submit" style="flex:1; background:var(--primary); color:white; border:none; padding:12px; border-radius:8px; font-weight:600; cursor:pointer;">Submit Request</button>
+                    <button type="button" onclick="document.getElementById('reopen-modal').style.display='none'" style="flex:1; background:transparent; color:var(--text-muted); border:1px solid var(--border); padding:12px; border-radius:8px; font-weight:600; cursor:pointer;">Cancel</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <script>
@@ -189,6 +254,35 @@
                     }
                 });
             });
+        });
+
+        // Reopen Requests Logic
+        function openReopenModal(examId, examTitle) {
+            document.getElementById('modal-exam-id').value = examId;
+            document.getElementById('modal-exam-title').innerText = examTitle;
+            document.getElementById('modal-reason').value = '';
+            document.getElementById('modal-description').value = '';
+            document.getElementById('reopen-modal').style.display = 'flex';
+        }
+
+        document.getElementById('reopen-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const examId = document.getElementById('modal-exam-id').value;
+            const reason = document.getElementById('modal-reason').value;
+            const description = document.getElementById('modal-description').value;
+
+            const res = await fetch('/api/student/requests/reopen', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ exam_id: examId, reason, description })
+            });
+
+            if (res.ok) {
+                window.location.reload();
+            } else {
+                const data = await res.json();
+                alert(data.error);
+            }
         });
     </script>
 </body>

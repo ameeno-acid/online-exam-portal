@@ -6,6 +6,7 @@
     <title>Admin Dashboard - Online Exam Portal</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         .dashboard-container {
             display: flex;
@@ -148,6 +149,9 @@
             <a href="/admin/students" class="nav-link">
                 <i class="fas fa-users"></i> Manage Students
             </a>
+            <a href="/admin/reopen_requests" class="nav-link">
+                <i class="fas fa-undo"></i> Reopen Requests
+            </a>
             <a href="#" class="nav-link logout-btn" id="logout-btn">
                 <i class="fas fa-sign-out-alt"></i> Logout
             </a>
@@ -174,8 +178,47 @@
                 </div>
             </div>
 
+            {% if role == 'admin' %}
+            <!-- Pending Users Panel -->
+            <div class="panel" style="margin-bottom: 24px;">
+                <h3>Pending Approvals</h3>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr><th>Name</th><th>Email</th><th>Role</th><th>Registered</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for user in pending_users %}
+                            <tr>
+                                <td>{{ user.name }}</td><td>{{ user.email }}</td>
+                                <td><span style="background: rgba(245, 158, 11, 0.1); color: #d97706; padding: 4px 8px; border-radius: 4px; font-size: 13px; font-weight: bold; text-transform: capitalize;">{{ user.role }}</span></td>
+                                <td>{{ user.created_at[:10] }}</td>
+                                <td>
+                                    <button onclick="approveUser({{ user.id }}, '{{ user.name }}')" style="background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; margin-right: 8px;"><i class="fas fa-check"></i></button>
+                                    <button onclick="rejectUser({{ user.id }}, '{{ user.name }}')" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer;"><i class="fas fa-times"></i></button>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No pending users.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Charts -->
+            <div class="stats-grid" style="margin-bottom: 24px;">
+                <div class="stat-card" style="display: flex; flex-direction: column; align-items: center;">
+                    <h3>Pass vs Fail Ratio</h3>
+                    <div style="position: relative; height: 200px; width: 100%; margin-top: 20px;">
+                        <canvas id="passFailChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
             <!-- Recent Results Panel -->
-            <div class="panel">
+            <div class="panel" style="margin-bottom: 24px;">
                 <h3>Recent Exam Results</h3>
                 <div class="table-responsive">
                     <table>
@@ -193,7 +236,13 @@
                             <tr>
                                 <td>{{ result.student_name }}</td>
                                 <td>{{ result.exam_title }}</td>
-                                <td><strong>{{ result.score }}</strong></td>
+                                <td>
+                                    {% if result.cheated %}
+                                        <span style="color: #ef4444; font-weight: bold; font-size: 13px;">CHEATING (0)</span>
+                                    {% else %}
+                                        <strong>{{ result.score }}</strong>
+                                    {% endif %}
+                                </td>
                                 <td>{{ result.total_questions }}</td>
                                 <td>{{ result.submitted_at }}</td>
                             </tr>
@@ -206,15 +255,84 @@
                     </table>
                 </div>
             </div>
+
+            <!-- Activity Logs Panel -->
+            <div class="panel">
+                <h3>Suspicious Activity Logs</h3>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Exam</th>
+                                <th>Action</th>
+                                <th>Description</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in activity_logs %}
+                            <tr>
+                                <td>{{ log.name }}</td>
+                                <td>{{ log.exam_title }}</td>
+                                <td><span style="color: #ef4444; font-weight: 600;">{{ log.action_type }}</span></td>
+                                <td>{{ log.description }}</td>
+                                <td>{{ log.timestamp }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="5" style="text-align: center; color: var(--text-muted);">No suspicious activities logged.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </main>
     </div>
 
     <script>
+        // Chart rendering
+        const passedCount = {{ passed|default(0) }};
+        const failedCount = {{ failed|default(0) }};
+        
+        const ctx = document.getElementById('passFailChart');
+        if (ctx) {
+            new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['Passed (>= 50%)', 'Failed (< 50%)'],
+                    datasets: [{
+                        data: [passedCount, failedCount],
+                        backgroundColor: ['#10b981', '#ef4444'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+        }
+
         document.getElementById('logout-btn').addEventListener('click', async (e) => {
             e.preventDefault();
             const res = await fetch('/api/logout', { method: 'POST' });
             if(res.ok) window.location.href = '/';
         });
+
+        async function approveUser(id, name) {
+            if(!confirm(`Are you sure you want to approve user ${name}?`)) return;
+            const res = await fetch(`/api/admin/users/${id}/approve`, { method: 'POST' });
+            if(res.ok) window.location.reload();
+        }
+
+        async function rejectUser(id, name) {
+            if(!confirm(`Are you sure you want to reject user ${name}?`)) return;
+            const res = await fetch(`/api/admin/users/${id}/reject`, { method: 'POST' });
+            if(res.ok) window.location.reload();
+        }
     </script>
 </body>
 </html>

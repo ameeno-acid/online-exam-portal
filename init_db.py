@@ -17,8 +17,18 @@ def init_db():
             name TEXT NOT NULL,
             email TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
-            role TEXT NOT NULL CHECK(role IN ('admin', 'student')),
+            role TEXT NOT NULL CHECK(role IN ('admin', 'teacher', 'student')),
+            session_token TEXT,
+            status TEXT DEFAULT 'pending',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # Create subjects table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS subjects (
+            subject_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_name TEXT UNIQUE NOT NULL
         )
     ''')
 
@@ -29,8 +39,11 @@ def init_db():
             exam_title TEXT NOT NULL,
             subject TEXT NOT NULL,
             description TEXT,
+            difficulty TEXT DEFAULT 'Medium',
             total_questions INTEGER NOT NULL DEFAULT 0,
             time_limit_minutes INTEGER NOT NULL,
+            start_date TEXT,
+            end_date TEXT,
             created_by_admin INTEGER NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (created_by_admin) REFERENCES users(id)
@@ -74,8 +87,49 @@ def init_db():
             exam_id INTEGER NOT NULL,
             score INTEGER NOT NULL,
             total_questions INTEGER NOT NULL,
+            cheated BOOLEAN DEFAULT 0,
             submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (exam_id) REFERENCES exams(exam_id) ON DELETE CASCADE
+        )
+    ''')
+
+    # Create password_resets table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS password_resets (
+            token TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            expires_at DATETIME NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    ''')
+
+    # Create activity_logs table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS activity_logs (
+            log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            exam_id INTEGER NOT NULL,
+            action_type TEXT NOT NULL,
+            description TEXT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (exam_id) REFERENCES exams(exam_id) ON DELETE CASCADE
+        )
+    ''')
+
+    # Create reopen_requests table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS reopen_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            exam_id INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            description TEXT,
+            status TEXT DEFAULT 'pending',
+            granted_end_date TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (exam_id) REFERENCES exams(exam_id) ON DELETE CASCADE
         )
     ''')
