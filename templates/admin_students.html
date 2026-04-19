@@ -79,7 +79,7 @@
                                 <td>{{ student.email }}</td>
                                 <td>{{ student.created_at }}</td>
                                 <td>
-                                    <button class="btn-delete" onclick="deleteStudent({{ student.id }}, '{{ student.name }}')">
+                                    <button class="btn-delete" onclick="deleteStudent('{{ student.id }}', '{{ student.name }}')">
                                         <i class="fas fa-trash"></i> Delete
                                     </button>
                                 </td>
