@@ -106,8 +106,8 @@
                                 </td>
                                 <td>
                                     {% if req.status == 'pending' %}
-                                        <button class="btn-approve" onclick="openApproveModal({{ req.id }}, '{{ req.student_name }}', '{{ req.exam_title }}')">Approve</button>
-                                        <button class="btn-reject" onclick="rejectRequest({{ req.id }})">Reject</button>
+                                        <button class="btn-approve" onclick="openApproveModal('{{ req.id }}', '{{ req.student_name }}', '{{ req.exam_title }}')">Approve</button>
+                                        <button class="btn-reject" onclick="rejectRequest('{{ req.id }}')">Reject</button>
                                     {% else %}
                                         <span style="color: var(--text-muted); font-size: 13px;">No actions</span>
                                     {% endif %}

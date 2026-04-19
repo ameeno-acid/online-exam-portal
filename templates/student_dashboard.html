@@ -130,7 +130,7 @@
                         <div style="background: rgba(239, 68, 68, 0.1); color: #ef4444; padding: 12px; border-radius: 8px; text-align: center; font-weight: 600; margin-bottom: 8px;">Expired <br><span style="font-size: 12px; font-weight: normal;">Ended: {{ exam.end_date.replace('T', ' ') }}</span></div>
                         {% set req = reopen_requests.get(exam.exam_id) %}
                         {% if not req %}
-                            <button class="btn-start" style="background: var(--surface); color: var(--text-main); border: 1px solid var(--border);" onclick="openReopenModal({{ exam.exam_id }}, '{{ exam.exam_title }}')">Request Reopen</button>
+                            <button class="btn-start" style="background: var(--surface); color: var(--text-main); border: 1px solid var(--border);" onclick="openReopenModal('{{ exam.exam_id }}', '{{ exam.exam_title }}')">Request Reopen</button>
                         {% elif req.status == 'pending' %}
                             <button class="btn-start" disabled style="background: rgba(245, 158, 11, 0.1); color: #d97706; cursor: not-allowed;">Request Pending</button>
                         {% elif req.status == 'rejected' %}
@@ -175,7 +175,7 @@
                                 <td>
                                     {% set req = reopen_requests.get(attempt.exam_id) %}
                                     {% if not req %}
-                                        <button class="filter-btn" style="font-size: 12px; padding: 6px 12px;" onclick="openReopenModal({{ attempt.exam_id }}, '{{ attempt.exam_title }}')">Request</button>
+                                        <button class="filter-btn" style="font-size: 12px; padding: 6px 12px;" onclick="openReopenModal('{{ attempt.exam_id }}', '{{ attempt.exam_title }}')">Request</button>
                                     {% elif req.status == 'pending' %}
                                         <span style="background: rgba(245, 158, 11, 0.1); color: #d97706; padding: 4px 8px; border-radius: 4px; font-size: 13px; font-weight: 600;">Pending</span>
                                     {% elif req.status == 'rejected' %}

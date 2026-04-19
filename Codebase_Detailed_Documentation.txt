@@ -1,0 +1,239 @@
+PROJECT CODEBASE DOCUMENTATION - EXTREME DETAIL BREAKDOWN
+======================================================================
+This document is a comprehensive, deep-dive explanation of the Online Exam Portal project. It covers the entire architecture, file breakdown, code logic, frontend/backend architecture, authentication, email mechanics, styling, and data flows, ensuring a full understanding of the project's internal mechanics.
+
+----------------------------------------------------------------------
+1. OVERALL ARCHITECTURE
+----------------------------------------------------------------------
+The system is built as a classic Client-Server full-stack web application. 
+
+Architecture Pattern: Monolithic MVC (Model-View-Controller)
+- Model: Handled directly via SQL queries in `app.py` querying `database.db`.
+- View: HTML templates powered by Jinja2, sprinkled with CSS & JS (`/static` & `/templates`).
+- Controller: Flask application (`app.py`), routing requests, and acting as the middleware between the frontend and database.
+
+Communication Flow: Frontend ↔ Backend
+1. Frontend makes HTTP GET/POST requests via standard web routing or via Fetch API calls for single-page dynamic interaction without reloads.
+2. The Backend (Flask) intercepts these routes. Most API operations expect JSON (`request.json`) and return JSON `jsonify()`. Web routes return rendered HTML.
+3. The Backend queries the SQLite database directly, manipulating data.
+4. The requested data, or the success/error string, is relayed back to the browser.
+5. In the browser, DOM elements are manipulated via JavaScript (`script.js` & inline JS) to visually reflect these changes.
+
+Folder Structure:
+Root (/)
+ ├── .env                 -> Environment variables (e.g. EMAIL_PASS).
+ ├── requirements.txt     -> Python package dependencies.
+ ├── app.py               -> Flask main application, routes, and logic.
+ ├── init_db.py           -> Script to create tables (schema definitions).
+ ├── database.db          -> SQLite database containing all app data.
+ ├── templates/           -> HTML files rendered by Flask templates. 
+ │    ├── index.html, admin_dashboard.html, student_exam.html, etc.
+ ├── static/              -> Static assets (Client-side scripts & styles).
+ │    ├── style.css       -> Global UI Styling.
+ │    ├── script.js       -> Global dynamic JS handling forms & toggles.
+ │    └── assets/         -> Images and SVG blobs.
+
+----------------------------------------------------------------------
+2. FILE-BY-FILE BREAKDOWN
+----------------------------------------------------------------------
+
+# init_db.py
+- Purpose: Builds the foundational database tables. Represents the system "Schema". 
+- Connections: Does not run during normal app execution. It is executed once to initialize `database.db`.
+- Breakdown: It drops any existing database.db and uses `conn.execute()` sequentially to create tables like `users`, `subjects`, `exams`, `questions`, `student_answers`, `results`, `activity_logs`, `reopen_requests`, `password_resets`.
+
+# app.py
+- Purpose: The core backend engine. Controls all data processing, validations, server setup, and authentication.
+- Dependencies: Flask (server, templating), SQLite3 (db), Werkzeug (password hashing), smtplib (emails), uuid (tokens).
+
+# static/style.css
+- Purpose: The singular styling source. Uses vanilla CSS to build the UI system.
+- Dependencies: Google Fonts API ('Plus Jakarta Sans').
+
+# static/script.js
+- Purpose: Handles AJAX requests for Registration and Login logic on `index.html`. Handles UI view transitions (Student vs. Admin).
+
+# templates/index.html
+- Purpose: Handles the core Landing & Authentication screen.
+- Controls: Displays user/admin toggle and forms. Connects to `style.css` and `script.js`.
+
+# templates/admin_*.html (admin_dashboard, admin_exams, etc.)
+- Purpose: Views for the admin UI. Contains loops formatting lists of tables, students, quizzes.
+
+# templates/student_*.html
+- Purpose: Views for the user taking quizzes. Highly interactive. `student_exam.html` holds anti-cheat JavaScript logic.
+
+----------------------------------------------------------------------
+3. CODE BLOCK EXPLANATION (STEP-BY-STEP)
+----------------------------------------------------------------------
+Let's analyze the most crucial code sections line-by-line across the project.
+
+>> app.py (Setup & Session Middleware)
+Input (Request) -> Processing (Check Token) -> Output (Allow/Deny)
+```python
+14: app = Flask(__name__)
+15: app.secret_key = os.urandom(24) # Generates random string for encrypting the session cookie securely.
+23: @app.before_request
+24: def check_session():
+...
+```
+- Logic: Before *any* request reaches its destination (`before_request`), we inspect the user's `session` object (secure client cookie). If they are logged in as a student, we open a database connection to compare their `session_token` with the database user's `session_token`.
+- Why written this way: This guarantees a user is force-logged out globally if their token is regenerated (such as resetting a password, or a concurrent login).
+- Conditions: It skips checking on open routes like 'index', 'login', 'static' using `request.endpoint`.
+- Output: Returns a 401 error or redirects back to the index if tokens mismatch.
+
+>> app.py (Login System - Lines 96-134)
+```python
+96: @app.route('/api/login', methods=['POST'])
+97: def login():
+        data = request.json
+...
+```
+- Step 1: Extracts email, password, role from JSON. Checks for missing values `not all(...)`. 
+- Step 2: Queries `users` DB table for identical email AND role. Extracts Single row (`fetchone()`).
+- Step 3: Verifies logic: Uses `check_password_hash` to compare incoming string against the stored Hash mathematically.
+- Step 4: Validate Approval: Assesses if `user['status']` is pending or rejected. Disallows login if so.
+- Step 5: Issues Token: Uses `uuid.uuid4()` to make a random string. Saves to Database. Populates the `session` array (stores securely in user's browser).
+- Step 6: Response returns redirect URL destination.
+
+>> app.py (Auto-grading System - Lines 802-857)
+```python
+802: @app.route('/api/student/exams/<int:exam_id>/submit', methods=['POST'])
+...
+831:     if cheated:
+832:         score = 0
+833:     else:
+834:         for q_id, selected_opt in answers.items():
+835:             if correct_answers.get(str(q_id)) == selected_opt:
+836:                 score += 1
+```
+- Input: Receives a dictionary of student answers mapping `question_id` to 'A', 'B', 'C', 'D' via JS Fetch API. Included is a boolean boolean `cheated`.
+- Logic loops through incoming dictionary `answers`. It verifies it against the `correct_answers` dictionary loaded from DB.
+- Each correct match adds 1 to `score`. 
+- Edge case handling: If anti-cheat detected (`cheated=True`), it bypasses loop and enforces score = 0 regardless of selections.
+- Finally writes the score into `results` table.
+
+----------------------------------------------------------------------
+4. FRONTEND DETAILS
+----------------------------------------------------------------------
+HTML Structure (`index.html`)
+- It is visually divided into two main zones wrapped in a `.container`.
+- The `.landing-content` represents the left-side text and graphic.
+- The `.auth-box` structurally contains the right-side glassmorphism card holding forms.
+- Dynamic Form Toggling: 1 `auth-box` contains 4 forms structurally overlayed. JavaScript hides/shows them depending on state. 
+- Overlays: `#forgot-modal` implements an overarching "fixed" layer that blocks user input unless they click cancel.
+
+CSS & Layout System (`style.css`)
+- Globals: The application uses CSS Variables (`:root`) to hold primary hex codes (e.g. `--primary: #4f46e5`). This allows easy theme changes without modifying 100 properties.
+- Layout Control: Uses CSS Flexbox universally. The `.container` leverages `display: flex; justify-content: space-between;` to perfectly balance the graphics and login form on wide monitors.
+- Responsiveness: Utilizes media queries (`@media (max-width: 900px)`). When viewport shrinks, layout flips from horizontal `row` to vertical `column`, hiding `.landing-content` to focus entirely on the login form. 
+
+Animations (Smooth UX)
+- The background blobs (`.blob`) use `@keyframes float`. The `transform: translate()` manipulates SVG coordinates endlessly via the `infinite alternate` instruction. 
+- Form Switch Animation: `style.css` lines 231-239 manages form transitions. Unactive forms are transformed down by 10px `translateY(10px)` and scale `0.98` with opacity 0. When class `.active-form` is applied via JS, it smoothly restores opacity to 1 and transforms `scale(1)`.
+
+JavaScript Behavior (`script.js`)
+- DOM Manipulation relies heavily on `getElementById` and `querySelectorAll` to toggle visibility classes.
+- Uses `fetch` API sequentially inside `async/await` blocks to push POST requests. By preventing default browser submissions `e.preventDefault()`, page reloads are entirely halted, establishing an App-like feel.
+
+----------------------------------------------------------------------
+5. BACKEND DETAILS
+----------------------------------------------------------------------
+Server Setup: Built on Flask, a synchronous WSGI microframework mapping Python functions to HTTP URLs.
+- Database Connection: Utilizes SQLite3, a file-based SQL system (`database.db`). To map column strings securely, it uses `conn.row_factory = sqlite3.Row`.
+- Request Flow: HTTP Event > Flask resolves the `@app.route` > executes Python code > interacts with SQLite queries natively without ORM > evaluates JSON response via `jsonify`.
+
+Endpoints and their purpose:
+1. `/api/register` | `POST`: Creates new student account with `pending` status.
+2. `/api/login` | `POST`: Validates credentials and generates session.
+3. `/api/forgot-password` | `POST`: Issues new reset token.
+4. `/api/reset-password` | `POST`: Verifies token limits, overrides old hash.
+5. `/admin/dashboard` | `GET`: Queries vast aggregated counts of tables linking users to stats to construct overview UI.
+6. Admin Users endpoints: Approves, rejects, or deletes specific student accounts updating `.status`.
+7. Exams endpoints: Creates topics, queries dates, binds questions, validates answers. 
+
+Middleware Usage:
+- `Before_request` hook validates sessions silently in the background across all traffic. By isolating this validation logic in the `check_session()` top-level decorable block, individual endpoints do not need redundant security logic checking if a user possesses valid tokens per request. 
+
+----------------------------------------------------------------------
+6. AUTHENTICATION SYSTEM EXTREME BREAKDOWN
+----------------------------------------------------------------------
+1. How Login Works (Step-by-Step Flow):
+   - A USER inputs text to the HTML form and submits.
+   - JS traps this event, halts it, and encodes data to JSON payload.
+   - Backend decodes it, maps against DB rows matching email and role type. 
+   - `check_password_hash` calculates the PBKDF2 hash of user input and tests identicality.
+   - If User status == 'pending' -> rejects auth entirely. 
+   - Backend binds a hardcoded 32-Char Hexadecimal string `UUID` mapped directly to User DB row id into the `session` Dict mechanism of Flask. 
+   - Informs JS via 200 OK. Browser executes `window.location.href="address"`.
+
+2. Session Handling
+   - Flask intrinsically serializes the Python `session` dictionary, signs it using `os.urandom(24)` secretly instantiated on App boot, and writes it directly to the Browser's Session Cookie. This avoids storing real DB IDs readable in cookies. Nobody can tamper with the file due to the cryptographic Signature verify on inbound.
+
+3. Validation & Error Handling
+   - If hash comparison fails `user and check_password_hash(...)`, code responds generically.
+   - JS parses JSON error explicitly via HTTP code `res.ok`, firing a native JS `alert(data.error)` when false.
+
+----------------------------------------------------------------------
+7. EMAIL SYSTEM
+----------------------------------------------------------------------
+Mechanism Overview: Uses native Python libraries `smtplib`, `email.mime.text`, and `email.mime.multipart` to assemble and deliver emails directly communicating via Google/SMTP remote host ports.
+
+- How it sends: The backend function `send_reset_email(to_email, token)` crafts a MIMEMultipart email package payload. It opens an encrypted connection using `server.starttls()`, logging in purely through environment files `os.environ` secrets so passwords avoid codebase exposure.
+- Triggers: It runs exclusively upon hitting `/api/forgot-password` if the target user email matches an existing `user['id']` in the Database. 
+- Data Flow: Forgot Form -> Payload JSON `email: "..."` -> Backend finds row -> Backend generates Random secure UUID reset link. -> Backend saves UUID + datetime + UserID to DB. -> Backend invokes SMPT TLS port and dumps text data to User inbox.
+
+----------------------------------------------------------------------
+8. DATA FLOW EXPLANATION (Tracing 2 Real Scenarios)
+----------------------------------------------------------------------
+
+FLOW A: Registration Data Flow
+1. User interacts: User enters "Alex", "alex@mail.com", "pass123" into Student Sign Up form and hits Submit.
+2. Web Browser: `script.js` fires. Button enters `<div class="loading">` stage dynamically spinning. JS `fetch` constructs `{'name': 'Alex', ...}` POST request. 
+3. Network Layer: HTTP request hits `app.py` at `@app.route('/api/register')`.
+4. Password Hashing Layer: Backend takes string "pass123" and runs `generate_password_hash()`. Becomes unreadable string (e.g. 'pbkdf2:sha256:260000$yXfX2XhE$9c89a'). 
+5. Database Entry Layer: SQL `INSERT INTO users ...` executes inserting pending row. 
+6. Database Output Layer: Returning Success -> Network Layer -> JSON OK packet stringifies. 
+7. User Interface Output Layer: `script.js` awaits response, detects 200 OK, flips button back to normal, dynamically executes `switchAction('login')` to flip the glass-box card smoothly into the Login component automatically without asking user. 
+
+FLOW B: Requesting Exam Reopen Flow
+1. User interact: Click "Request Reopen" on `student_dashboard.html`. Modal Appears. Type Reason text. Press Send. 
+2. JS: Constructs JSON payload of exam ID and text description string. POST `/api/student/requests/reopen`.
+3. Backend Validation: Queries `SELECT status FROM reopen_requests`. Verifies user hasn't spammed identical request previously. Detects logic edge cases. Updates old rejected requests to 'pending' state again rather than deleting via `UPDATE ...`.
+4. DB Write: Adds record. 
+5. Relay: Returns JSON. 
+6. Admin Panel Flow Continuation: Admin opens `admin_dashboard`. SQL executes JOIN operations combining User and Reopen request tables for a unified UI displaying the user's name next to the text.
+7. Admin Approve Action: Press `Approve`. Triggers `update reopen_requests status = approved`. DB also intrinsically Deletes older attempts matching that exam using `DELETE FROM results` entirely rebooting their chance. Write to Activity Logging table mapping it silently. Returns JSON Success.
+
+----------------------------------------------------------------------
+9. STYLING SYSTEM
+----------------------------------------------------------------------
+- Organization Details: A pure monolithic global CSS. Utilizing CSS Variables ensures uniformity globally. 
+- Form Classes Hierarchy: Elements adhere globally to reusable components structurally:
+  `.input-group`: Relative wrapper to allow floating labels.
+  `.input-field`: Baseline text boxes padding matching. 
+  `.floating-label`: Text positioning trick scaling with transformations based on `:placeholder-shown` CSS pseudo-query states. 
+- Naming Conventions: Using BEM inspired logic. Classes rely heavily on hyphen-delimited descriptive titles (`role-toggle`, `landing-content`, `form-header`). 
+
+----------------------------------------------------------------------
+10. HIDDEN LOGIC / IMPORTANT DETAILS
+----------------------------------------------------------------------
+- Security Considerations: Single Session Control is silently invoked. `check_session()` checks `session_token` manually each time. If an admin deletes your account or you log in elsewhere replacing the token natively stored in DB, your cookie mismatched token fails validation, forcing logout universally.
+- Performance Optimizations: The dashboard relies deeply on aggregated `SELECT COUNT(*) WHERE...` SQL structures to process hundreds of results into single numerical statistics directly inside the disk memory process, avoiding loading dictionaries iteratively into application Python layer RAM footprint. 
+- Edge Cases Handled in Code: Password reset functionality includes validation that verifies if an extracted string timestamp `.expires_at` calculates logically beyond physical actual Python `datetime.now()`. Further protects from duplicate presses by writing an integer flag to `used = 1` preventing a hacker grabbing a previously valid Token history packet and intercepting.
+
+----------------------------------------------------------------------
+11. DEPENDENCIES
+----------------------------------------------------------------------
+Found in `requirements.txt`.
+- Flask: The backbone Python web framework used for app building and API handling.
+- python-dotenv: Used fundamentally on lines `from dotenv import load_dotenv` -> `load_dotenv()`. This natively rips system-hidden variables inside the custom `.env` file string logic into environment variables used throughout app securely. 
+- Werkzeug: Security library wrapper bundled with Flask manipulating password hashing. Allows mathematical translation securing credentials robustly from brute-forcing.
+
+----------------------------------------------------------------------
+12. SUMMARY SECTION
+----------------------------------------------------------------------
+In simple terms, the Online Exam Portal operates identically to modern enterprise SaaS web applications. 
+It establishes a visually sophisticated Frontend boundary acting identically to a single page application via dynamic javascript asynchronous commands mapping natively to the HTML Document Object Layer. Forms shift, popups occur, and texts change without reloading the page once. Once a user triggers actions, precise and encrypted HTTP data objects traverse network systems into a backend logic hub powered by Python and Flask. This Flask hub manipulates and questions SQLite data disk memory securely. It ensures students can uniquely be authenticated, managed tightly per timeline metrics, whilst Administrators visualize these exact data flows through mathematical groupings. Using direct HTML manipulation logic, CSS structural overlays, and python object-relational mapping patterns implicitly—it orchestrates an intricate but smoothly decoupled system. 
+By utilizing robust password hashing, token validation pipelines internally, session regeneration overrides inherently blocking double-logins, error catching SMTP handlers communicating password requests externally securely, and pure logic mapping database schema validations properly, a true zero to advanced secure enterprise infrastructure portal runs flawlessly for exam tracking systems.
+======================================================================

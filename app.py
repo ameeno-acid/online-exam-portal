@@ -443,6 +443,24 @@ def create_subject():
     conn.close()
     return jsonify({'success': 'Subject added successfully'})
 
+@app.route('/api/admin/subjects', methods=['DELETE'])
+def delete_subject():
+    if session.get('role') not in ['admin', 'teacher']:
+        return jsonify({'error': 'Unauthorized'}), 403
+        
+    data = request.json or {}
+    subject_name = data.get('subject_name')
+    if not subject_name:
+        return jsonify({'error': 'Subject name required'}), 400
+        
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM subjects WHERE subject_name = ?", (subject_name,))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': 'Subject deleted successfully'})
+
 @app.route('/api/admin/exams', methods=['POST'])
 def create_exam():
     if session.get('role') not in ['admin', 'teacher']:
