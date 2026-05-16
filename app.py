@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
-import psycopg
-from psycopg.rows import dict_row
+import psycopg22
+import psycopg22.extras
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
 import uuid
@@ -13,14 +13,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
 DATABASE = 'database.db'
 
 class PostgresConnWrapper:
     def __init__(self, conn):
         self.conn = conn
     def cursor(self):
-        return self.conn.cursor(row_factory=dict_row)
+        return self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     def commit(self):
         self.conn.commit()
     def close(self):
@@ -30,7 +30,7 @@ def get_db():
     db_url = os.environ.get('DATABASE_URL')
     if not db_url:
         raise ValueError("DATABASE_URL environment variable not set")
-    conn = psycopg.connect(db_url)
+    conn = psycopg2.connect(db_url)
     return PostgresConnWrapper(conn)
 
 @app.before_request
@@ -73,7 +73,7 @@ def register():
     try:
         cursor.execute("INSERT INTO users (name, email, password_hash, role, status) VALUES (%s, %s, %s, 'student', 'pending')", (name, email, hashed_password))
         conn.commit()
-    except psycopg.IntegrityError:
+    except psycopg2.IntegrityError:
         conn.close()
         return jsonify({'error': 'Email already exists'}), 409
     
@@ -99,7 +99,7 @@ def register_admin():
         cursor.execute("INSERT INTO users (name, email, password_hash, role) VALUES (%s, %s, %s, 'admin')",
                        (name, email, hashed_pw))
         conn.commit()
-    except psycopg.IntegrityError:
+    except psycopg2.IntegrityError:
         return jsonify({'error': 'Email already registered'}), 409
     finally:
         conn.close()
@@ -449,7 +449,7 @@ def create_subject():
     try:
         cursor.execute("INSERT INTO subjects (subject_name) VALUES (%s)", (subject_name,))
         conn.commit()
-    except psycopg.IntegrityError:
+    except psycopg2.IntegrityError:
         conn.close()
         return jsonify({'error': 'Subject already exists'}), 400
         

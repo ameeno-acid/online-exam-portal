@@ -1,4 +1,5 @@
-import psycopg
+import psycopg2
+import psycopg2.extras
 import os
 
 DATABASE = 'database.db'
@@ -7,7 +8,7 @@ def init_db():
     db_url = os.environ.get('DATABASE_URL')
     if not db_url:
         raise ValueError("DATABASE_URL environment variable not set")
-    conn = psycopg.connect(db_url)
+    conn = psycopg2.connect(db_url)
     cursor = conn.cursor()
 
     # Create users table
