@@ -1,19 +1,19 @@
-import sqlite3
+import psycopg
 import os
 
 DATABASE = 'database.db'
 
 def init_db():
-    if os.path.exists(DATABASE):
-        os.remove(DATABASE)
-        
-    conn = sqlite3.connect(DATABASE)
+    db_url = os.environ.get('DATABASE_URL')
+    if not db_url:
+        raise ValueError("DATABASE_URL environment variable not set")
+    conn = psycopg.connect(db_url)
     cursor = conn.cursor()
 
     # Create users table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
             email TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
@@ -27,7 +27,7 @@ def init_db():
     # Create subjects table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS subjects (
-            subject_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject_id SERIAL PRIMARY KEY,
             subject_name TEXT UNIQUE NOT NULL
         )
     ''')
@@ -35,7 +35,7 @@ def init_db():
     # Create exams table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS exams (
-            exam_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            exam_id SERIAL PRIMARY KEY,
             exam_title TEXT NOT NULL,
             subject TEXT NOT NULL,
             description TEXT,
@@ -53,7 +53,7 @@ def init_db():
     # Create questions table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS questions (
-            question_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            question_id SERIAL PRIMARY KEY,
             exam_id INTEGER NOT NULL,
             question_text TEXT NOT NULL,
             option_a TEXT NOT NULL,
@@ -68,7 +68,7 @@ def init_db():
     # Create student_answers table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS student_answers (
-            answer_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            answer_id SERIAL PRIMARY KEY,
             student_id INTEGER NOT NULL,
             exam_id INTEGER NOT NULL,
             question_id INTEGER NOT NULL,
@@ -82,12 +82,12 @@ def init_db():
     # Create results table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS results (
-            result_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            result_id SERIAL PRIMARY KEY,
             student_id INTEGER NOT NULL,
             exam_id INTEGER NOT NULL,
             score INTEGER NOT NULL,
             total_questions INTEGER NOT NULL,
-            cheated BOOLEAN DEFAULT 0,
+            cheated BOOLEAN DEFAULT FALSE,
             submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (exam_id) REFERENCES exams(exam_id) ON DELETE CASCADE
@@ -99,7 +99,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS password_resets (
             token TEXT PRIMARY KEY,
             user_id INTEGER NOT NULL,
-            expires_at DATETIME NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
     ''')
@@ -107,7 +107,7 @@ def init_db():
     # Create activity_logs table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS activity_logs (
-            log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            log_id SERIAL PRIMARY KEY,
             student_id INTEGER NOT NULL,
             exam_id INTEGER NOT NULL,
             action_type TEXT NOT NULL,
@@ -121,7 +121,7 @@ def init_db():
     # Create reopen_requests table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS reopen_requests (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL,
             exam_id INTEGER NOT NULL,
             reason TEXT NOT NULL,

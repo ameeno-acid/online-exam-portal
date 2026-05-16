@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
-import sqlite3
+import psycopg
+from psycopg.rows import dict_row
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
 import uuid
@@ -15,10 +16,22 @@ app = Flask(__name__)
 app.secret_key = os.urandom(24)
 DATABASE = 'database.db'
 
+class PostgresConnWrapper:
+    def __init__(self, conn):
+        self.conn = conn
+    def cursor(self):
+        return self.conn.cursor(row_factory=dict_row)
+    def commit(self):
+        self.conn.commit()
+    def close(self):
+        self.conn.close()
+
 def get_db():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    return conn
+    db_url = os.environ.get('DATABASE_URL')
+    if not db_url:
+        raise ValueError("DATABASE_URL environment variable not set")
+    conn = psycopg.connect(db_url)
+    return PostgresConnWrapper(conn)
 
 @app.before_request
 def check_session():
@@ -26,7 +39,7 @@ def check_session():
         if request.endpoint not in ['index', 'logout', 'login', 'static']:
             conn = get_db()
             cursor = conn.cursor()
-            cursor.execute("SELECT session_token FROM users WHERE id = ?", (session['user_id'],))
+            cursor.execute("SELECT session_token FROM users WHERE id = %s", (session['user_id'],))
             user = cursor.fetchone()
             conn.close()
             if not user or user['session_token'] != session.get('session_token'):
@@ -58,9 +71,9 @@ def register():
     conn = get_db()
     cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO users (name, email, password_hash, role, status) VALUES (?, ?, ?, 'student', 'pending')", (name, email, hashed_password))
+        cursor.execute("INSERT INTO users (name, email, password_hash, role, status) VALUES (%s, %s, %s, 'student', 'pending')", (name, email, hashed_password))
         conn.commit()
-    except sqlite3.IntegrityError:
+    except psycopg.IntegrityError:
         conn.close()
         return jsonify({'error': 'Email already exists'}), 409
     
@@ -83,10 +96,10 @@ def register_admin():
     cursor = conn.cursor()
     
     try:
-        cursor.execute("INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, 'admin')",
+        cursor.execute("INSERT INTO users (name, email, password_hash, role) VALUES (%s, %s, %s, 'admin')",
                        (name, email, hashed_pw))
         conn.commit()
-    except sqlite3.IntegrityError:
+    except psycopg.IntegrityError:
         return jsonify({'error': 'Email already registered'}), 409
     finally:
         conn.close()
@@ -105,7 +118,7 @@ def login():
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE email = ? AND role = ?", (email, role_type))
+    cursor.execute("SELECT * FROM users WHERE email = %s AND role = %s", (email, role_type))
     user = cursor.fetchone()
     conn.close()
 
@@ -119,7 +132,7 @@ def login():
         
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("UPDATE users SET session_token = ? WHERE id = ?", (token, user['id']))
+        cursor.execute("UPDATE users SET session_token = %s WHERE id = %s", (token, user['id']))
         conn.commit()
         conn.close()
 
@@ -196,7 +209,7 @@ def forgot_password():
         
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM users WHERE email = ?", (email,))
+        cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
         user = cursor.fetchone()
         
         if user:
@@ -207,8 +220,8 @@ def forgot_password():
             print("[DEBUG] Generated token. Storing in database...")
             # Rather than deleting old tokens, mark them used or just let them expire. 
             # We'll just delete them to keep it clean or ignore them. We will stick to the single valid token approach:
-            cursor.execute("DELETE FROM password_resets WHERE user_id = ?", (user['id'],))
-            cursor.execute("INSERT INTO password_resets (token, user_id, expires_at, used) VALUES (?, ?, ?, 0)", 
+            cursor.execute("DELETE FROM password_resets WHERE user_id = %s", (user['id'],))
+            cursor.execute("INSERT INTO password_resets (token, user_id, expires_at, used) VALUES (%s, %s, %s, 0)", 
                            (token, user['id'], expires))
             conn.commit()
             print("[DEBUG] Stored token successfully.")
@@ -248,7 +261,7 @@ def do_reset_password():
             
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT user_id, expires_at, used FROM password_resets WHERE token = ?", (token,))
+        cursor.execute("SELECT user_id, expires_at, used FROM password_resets WHERE token = %s", (token,))
         reset_entry = cursor.fetchone()
         
         if not reset_entry:
@@ -274,8 +287,8 @@ def do_reset_password():
             
         print("[DEBUG] Token validated successfully. Updating password...")
         hashed = generate_password_hash(new_password)
-        cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hashed, reset_entry['user_id']))
-        cursor.execute("UPDATE password_resets SET used = 1 WHERE token = ?", (token,))
+        cursor.execute("UPDATE users SET password_hash = %s WHERE id = %s", (hashed, reset_entry['user_id']))
+        cursor.execute("UPDATE password_resets SET used = 1 WHERE token = %s", (token,))
         conn.commit()
         conn.close()
         
@@ -348,12 +361,12 @@ def approve_user(user_id):
         return jsonify({'error': 'Unauthorized'}), 403
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET status = 'approved' WHERE id = ?", (user_id,))
+    cursor.execute("UPDATE users SET status = 'approved' WHERE id = %s", (user_id,))
     
     # Also log this
     cursor.execute('''
         INSERT INTO activity_logs (student_id, exam_id, action_type, description)
-        VALUES (?, 0, 'admin_approval', 'User approved by admin')
+        VALUES (%s, 0, 'admin_approval', 'User approved by admin')
     ''', (user_id,))
     
     conn.commit()
@@ -366,11 +379,11 @@ def reject_user(user_id):
         return jsonify({'error': 'Unauthorized'}), 403
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET status = 'rejected' WHERE id = ?", (user_id,))
+    cursor.execute("UPDATE users SET status = 'rejected' WHERE id = %s", (user_id,))
     
     cursor.execute('''
         INSERT INTO activity_logs (student_id, exam_id, action_type, description)
-        VALUES (?, 0, 'admin_rejection', 'User rejected by admin')
+        VALUES (%s, 0, 'admin_rejection', 'User rejected by admin')
     ''', (user_id,))
     
     conn.commit()
@@ -397,7 +410,7 @@ def delete_student(student_id):
         
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM users WHERE id = ? AND role = 'student'", (student_id,))
+    cursor.execute("DELETE FROM users WHERE id = %s AND role = 'student'", (student_id,))
     conn.commit()
     conn.close()
     
@@ -434,9 +447,9 @@ def create_subject():
     conn = get_db()
     cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO subjects (subject_name) VALUES (?)", (subject_name,))
+        cursor.execute("INSERT INTO subjects (subject_name) VALUES (%s)", (subject_name,))
         conn.commit()
-    except sqlite3.IntegrityError:
+    except psycopg.IntegrityError:
         conn.close()
         return jsonify({'error': 'Subject already exists'}), 400
         
@@ -455,7 +468,7 @@ def delete_subject():
         
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM subjects WHERE subject_name = ?", (subject_name,))
+    cursor.execute("DELETE FROM subjects WHERE subject_name = %s", (subject_name,))
     conn.commit()
     conn.close()
     
@@ -481,7 +494,7 @@ def create_exam():
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO exams (exam_title, subject, description, difficulty, time_limit_minutes, start_date, end_date, created_by_admin) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO exams (exam_title, subject, description, difficulty, time_limit_minutes, start_date, end_date, created_by_admin) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
         (title, subject, description, difficulty, time_limit, start_date, end_date, session.get('user_id'))
     )
     conn.commit()
@@ -496,7 +509,7 @@ def delete_exam(exam_id):
         
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM exams WHERE exam_id = ?", (exam_id,))
+    cursor.execute("DELETE FROM exams WHERE exam_id = %s", (exam_id,))
     conn.commit()
     conn.close()
     
@@ -511,14 +524,14 @@ def admin_questions(exam_id):
     cursor = conn.cursor()
     
     # Get exam details
-    cursor.execute("SELECT * FROM exams WHERE exam_id = ?", (exam_id,))
+    cursor.execute("SELECT * FROM exams WHERE exam_id = %s", (exam_id,))
     exam = cursor.fetchone()
     if not exam:
         conn.close()
         return "Exam not found", 404
         
     # Get questions
-    cursor.execute("SELECT * FROM questions WHERE exam_id = ?", (exam_id,))
+    cursor.execute("SELECT * FROM questions WHERE exam_id = %s", (exam_id,))
     questions = cursor.fetchall()
     conn.close()
     
@@ -544,11 +557,11 @@ def add_question(exam_id):
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO questions (exam_id, question_text, option_a, option_b, option_c, option_d, correct_option)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
     ''', (exam_id, q_text, opt_a, opt_b, opt_c, opt_d, correct))
     
     # Update total questions count
-    cursor.execute("UPDATE exams SET total_questions = total_questions + 1 WHERE exam_id = ?", (exam_id,))
+    cursor.execute("UPDATE exams SET total_questions = total_questions + 1 WHERE exam_id = %s", (exam_id,))
     
     conn.commit()
     conn.close()
@@ -564,12 +577,12 @@ def delete_question(question_id):
     cursor = conn.cursor()
     
     # find exam_id to decrement count
-    cursor.execute("SELECT exam_id FROM questions WHERE question_id = ?", (question_id,))
+    cursor.execute("SELECT exam_id FROM questions WHERE question_id = %s", (question_id,))
     row = cursor.fetchone()
     if row:
         exam_id = row['exam_id']
-        cursor.execute("DELETE FROM questions WHERE question_id = ?", (question_id,))
-        cursor.execute("UPDATE exams SET total_questions = total_questions - 1 WHERE exam_id = ?", (exam_id,))
+        cursor.execute("DELETE FROM questions WHERE question_id = %s", (question_id,))
+        cursor.execute("UPDATE exams SET total_questions = total_questions - 1 WHERE exam_id = %s", (exam_id,))
         conn.commit()
         
     conn.close()
@@ -605,20 +618,20 @@ def approve_request(req_id):
     
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM reopen_requests WHERE id = ?", (req_id,))
+    cursor.execute("SELECT * FROM reopen_requests WHERE id = %s", (req_id,))
     req = cursor.fetchone()
     if not req:
         conn.close()
         return jsonify({'error': 'Request not found'}), 404
         
-    cursor.execute("UPDATE reopen_requests SET status = 'approved', granted_end_date = ? WHERE id = ?", (granted_end_date, req_id))
+    cursor.execute("UPDATE reopen_requests SET status = 'approved', granted_end_date = %s WHERE id = %s", (granted_end_date, req_id))
     
     # Reset attempt
-    cursor.execute("DELETE FROM results WHERE student_id = ? AND exam_id = ?", (req['user_id'], req['exam_id']))
-    cursor.execute("DELETE FROM student_answers WHERE student_id = ? AND exam_id = ?", (req['user_id'], req['exam_id']))
+    cursor.execute("DELETE FROM results WHERE student_id = %s AND exam_id = %s", (req['user_id'], req['exam_id']))
+    cursor.execute("DELETE FROM student_answers WHERE student_id = %s AND exam_id = %s", (req['user_id'], req['exam_id']))
     
     # Log it
-    cursor.execute("INSERT INTO activity_logs (student_id, exam_id, action_type, description) VALUES (?, ?, 'reopen_approved', 'Exam reopened by admin')", (req['user_id'], req['exam_id']))
+    cursor.execute("INSERT INTO activity_logs (student_id, exam_id, action_type, description) VALUES (%s, %s, 'reopen_approved', 'Exam reopened by admin')", (req['user_id'], req['exam_id']))
     
     conn.commit()
     conn.close()
@@ -631,7 +644,7 @@ def reject_request(req_id):
         
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE reopen_requests SET status = 'rejected' WHERE id = ?", (req_id,))
+    cursor.execute("UPDATE reopen_requests SET status = 'rejected' WHERE id = %s", (req_id,))
     conn.commit()
     conn.close()
     return jsonify({'success': 'Request rejected'})
@@ -650,7 +663,7 @@ def student_dashboard():
         SELECT r.*, e.exam_title, e.time_limit_minutes, e.difficulty
         FROM results r
         JOIN exams e ON r.exam_id = e.exam_id
-        WHERE r.student_id = ?
+        WHERE r.student_id = %s
         ORDER BY r.submitted_at DESC
     ''', (student_id,))
     attempted_exams = cursor.fetchall()
@@ -659,7 +672,7 @@ def student_dashboard():
     attempted_exam_ids = [row['exam_id'] for row in attempted_exams]
     
     if attempted_exam_ids:
-        placeholders = ','.join(['?'] * len(attempted_exam_ids))
+        placeholders = ','.join(['%s'] * len(attempted_exam_ids))
         cursor.execute(f'''
             SELECT * FROM exams 
             WHERE total_questions > 0 AND exam_id NOT IN ({placeholders})
@@ -673,7 +686,7 @@ def student_dashboard():
     cursor.execute("SELECT * FROM subjects ORDER BY subject_name ASC")
     subjects = [row['subject_name'] for row in cursor.fetchall()]
 
-    cursor.execute("SELECT * FROM reopen_requests WHERE user_id = ?", (student_id,))
+    cursor.execute("SELECT * FROM reopen_requests WHERE user_id = %s", (student_id,))
     reopen_requests = {row['exam_id']: dict(row) for row in cursor.fetchall()}
     
     conn.close()
@@ -707,7 +720,7 @@ def request_reopen():
     cursor = conn.cursor()
     
     # Check if a pending or approved request already exists
-    cursor.execute("SELECT status FROM reopen_requests WHERE user_id = ? AND exam_id = ?", (student_id, exam_id))
+    cursor.execute("SELECT status FROM reopen_requests WHERE user_id = %s AND exam_id = %s", (student_id, exam_id))
     existing = cursor.fetchone()
     if existing:
         if existing['status'] in ['pending', 'approved']:
@@ -715,10 +728,10 @@ def request_reopen():
             return jsonify({'error': 'You already have an active request for this exam'}), 400
         else:
             # Overwrite rejected
-            cursor.execute("UPDATE reopen_requests SET reason = ?, description = ?, status = 'pending', created_at = CURRENT_TIMESTAMP WHERE user_id = ? AND exam_id = ?",
+            cursor.execute("UPDATE reopen_requests SET reason = %s, description = %s, status = 'pending', created_at = CURRENT_TIMESTAMP WHERE user_id = %s AND exam_id = %s",
                            (reason, description, student_id, exam_id))
     else:
-        cursor.execute("INSERT INTO reopen_requests (user_id, exam_id, reason, description) VALUES (?, ?, ?, ?)",
+        cursor.execute("INSERT INTO reopen_requests (user_id, exam_id, reason, description) VALUES (%s, %s, %s, %s)",
                        (student_id, exam_id, reason, description))
                        
     conn.commit()
@@ -732,7 +745,7 @@ def student_exam(exam_id):
         
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM exams WHERE exam_id = ?", (exam_id,))
+    cursor.execute("SELECT * FROM exams WHERE exam_id = %s", (exam_id,))
     exam = cursor.fetchone()
     
     if not exam:
@@ -742,7 +755,7 @@ def student_exam(exam_id):
     student_id = session.get('user_id')
     
     # Check if already attempted
-    cursor.execute("SELECT * FROM results WHERE student_id = ? AND exam_id = ?", (student_id, exam_id))
+    cursor.execute("SELECT * FROM results WHERE student_id = %s AND exam_id = %s", (student_id, exam_id))
     if cursor.fetchone():
         conn.close()
         return redirect(url_for('student_dashboard'))
@@ -750,13 +763,13 @@ def student_exam(exam_id):
     # Check time window OR approved reopen request
     current_time = datetime.now().strftime('%Y-%m-%dT%H:%M')
     
-    cursor.execute("SELECT * FROM reopen_requests WHERE user_id = ? AND exam_id = ? AND status = 'approved'", (student_id, exam_id))
+    cursor.execute("SELECT * FROM reopen_requests WHERE user_id = %s AND exam_id = %s AND status = 'approved'", (student_id, exam_id))
     approved_req = cursor.fetchone()
     
     can_access = False
     
     if approved_req:
-        # Ignore original window, rely on granted_end_date if exists, else it's open forever or original?
+        # Ignore original window, rely on granted_end_date if exists, else it's open forever or original%s
         # User said "Override endDate only for that specific student"
         if not approved_req['granted_end_date'] or approved_req['granted_end_date'] >= current_time:
             can_access = True
@@ -788,7 +801,7 @@ def get_exam_questions(exam_id):
     cursor.execute('''
         SELECT question_id, question_text, option_a, option_b, option_c, option_d 
         FROM questions 
-        WHERE exam_id = ? 
+        WHERE exam_id = %s 
         ORDER BY RANDOM()
     ''', (exam_id,))
     
@@ -810,7 +823,7 @@ def log_activity(exam_id):
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO activity_logs (student_id, exam_id, action_type, description)
-        VALUES (?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s)
     ''', (session.get('user_id'), exam_id, action_type, description))
     conn.commit()
     conn.close()
@@ -834,13 +847,13 @@ def submit_exam(exam_id):
     cursor = conn.cursor()
     
     # Ensure they haven't submitted already to prevent retakes
-    cursor.execute("SELECT * FROM results WHERE student_id = ? AND exam_id = ?", (student_id, exam_id))
+    cursor.execute("SELECT * FROM results WHERE student_id = %s AND exam_id = %s", (student_id, exam_id))
     if cursor.fetchone():
         conn.close()
         return jsonify({'error': 'Exam already submitted'}), 403
         
     # Fetch correct options to grade
-    cursor.execute("SELECT question_id, correct_option FROM questions WHERE exam_id = ?", (exam_id,))
+    cursor.execute("SELECT question_id, correct_option FROM questions WHERE exam_id = %s", (exam_id,))
     correct_answers = {str(row['question_id']): row['correct_option'] for row in cursor.fetchall()}
     
     score = 0
@@ -855,13 +868,13 @@ def submit_exam(exam_id):
                 
             cursor.execute('''
                 INSERT INTO student_answers (student_id, exam_id, question_id, selected_option)
-                VALUES (?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s)
             ''', (student_id, exam_id, q_id, selected_opt))
             
     # Insert Result
     cursor.execute('''
         INSERT INTO results (student_id, exam_id, score, total_questions, cheated)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s)
     ''', (student_id, exam_id, score, total_questions, cheated))
     
     conn.commit()
@@ -886,7 +899,7 @@ def student_result(exam_id):
         SELECT r.*, e.exam_title, e.time_limit_minutes, e.difficulty
         FROM results r
         JOIN exams e ON r.exam_id = e.exam_id
-        WHERE r.student_id = ? AND r.exam_id = ?
+        WHERE r.student_id = %s AND r.exam_id = %s
     ''', (session.get('user_id'), exam_id))
     result = cursor.fetchone()
     conn.close()
