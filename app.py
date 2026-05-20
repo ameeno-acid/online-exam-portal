@@ -355,12 +355,6 @@ def approve_user(user_id):
     cursor = conn.cursor()
     cursor.execute("UPDATE users SET status = 'approved' WHERE id = %s", (user_id,))
     
-    # Also log this
-    cursor.execute('''
-        INSERT INTO activity_logs (student_id, exam_id, action_type, description)
-        VALUES (%s, 0, 'admin_approval', 'User approved by admin')
-    ''', (user_id,))
-    
     conn.commit()
     conn.close()
     return jsonify({'success': 'User approved'})
@@ -372,11 +366,6 @@ def reject_user(user_id):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("UPDATE users SET status = 'rejected' WHERE id = %s", (user_id,))
-    
-    cursor.execute('''
-        INSERT INTO activity_logs (student_id, exam_id, action_type, description)
-        VALUES (%s, 0, 'admin_rejection', 'User rejected by admin')
-    ''', (user_id,))
     
     conn.commit()
     conn.close()
