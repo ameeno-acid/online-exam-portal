@@ -687,7 +687,7 @@ def student_dashboard():
     subjects = [row['subject_name'] for row in cursor.fetchall()]
 
     cursor.execute("SELECT * FROM reopen_requests WHERE user_id = %s", (student_id,))
-    reopen_requests = {row['exam_id']: dict(row) for row in cursor.fetchall()}
+    reopen_requests = {row['exam_id']: row for row in cursor.fetchall()}
     
     conn.close()
     
