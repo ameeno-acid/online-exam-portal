@@ -171,7 +171,7 @@
                                 <td><span style="font-size:13px; font-weight:700; color:var(--text-muted);">{{ attempt.difficulty }}</span></td>
                                 <td><span class="score-pill">{{ attempt.score }} / {{ attempt.total_questions }}</span></td>
                                 <td>{{ attempt.total_questions }}</td>
-                                <td>{{ attempt.submitted_at[:16] }}</td>
+                                <td>{{ attempt.submitted_at.strftime('%Y-%m-%d %H:%M') if attempt.submitted_at else 'N/A' }}</td>
                                 <td>
                                     {% set req = reopen_requests.get(attempt.exam_id) %}
                                     {% if not req %}

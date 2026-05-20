@@ -100,7 +100,7 @@
                                 <td>{{ req.exam_title }}</td>
                                 <td>{{ req.reason }}</td>
                                 <td style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ req.description }}">{{ req.description or '-' }}</td>
-                                <td>{{ req.created_at[:16] }}</td>
+                                <td>{{ req.created_at.strftime('%Y-%m-%d %H:%M') if req.created_at else 'N/A' }}</td>
                                 <td>
                                     <span class="status-badge status-{{ req.status }}">{{ req.status }}</span>
                                 </td>
