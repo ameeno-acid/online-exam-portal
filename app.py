@@ -152,8 +152,8 @@ def logout():
     return jsonify({'success': 'Logged out'})
 
 def send_reset_email(to_email, token):
-    email_user = os.environ.get('EMAIL_USER')
-    email_pass = os.environ.get('EMAIL_PASS')
+    email_user = os.environ.get('EMAIL_USER', '').strip('"\'')
+    email_pass = os.environ.get('EMAIL_PASS', '').strip('"\'')
     smtp_server = os.environ.get('SMTP_SERVER', 'smtp.gmail.com')
     smtp_port = int(os.environ.get('SMTP_PORT', 587))
     
