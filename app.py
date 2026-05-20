@@ -221,7 +221,7 @@ def forgot_password():
             # Rather than deleting old tokens, mark them used or just let them expire. 
             # We'll just delete them to keep it clean or ignore them. We will stick to the single valid token approach:
             cursor.execute("DELETE FROM password_resets WHERE user_id = %s", (user['id'],))
-            cursor.execute("INSERT INTO password_resets (token, user_id, expires_at, used) VALUES (%s, %s, %s, 0)", 
+            cursor.execute("INSERT INTO password_resets (token, user_id, expires_at) VALUES (%s, %s, %s)", 
                            (token, user['id'], expires))
             conn.commit()
             print("[DEBUG] Stored token successfully.")
@@ -261,24 +261,16 @@ def do_reset_password():
             
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT user_id, expires_at, used FROM password_resets WHERE token = %s", (token,))
+        cursor.execute("SELECT user_id, expires_at FROM password_resets WHERE token = %s", (token,))
         reset_entry = cursor.fetchone()
         
         if not reset_entry:
             conn.close()
             print("[TOKEN ERROR] Token not found in database.")
-            return jsonify({'error': 'Invalid or expired token'}), 400
+            return jsonify({'error': 'Invalid, expired, or already used token.'}), 400
             
-        if reset_entry['used'] == 1:
-            conn.close()
-            print("[TOKEN ERROR] Token has already been used.")
-            return jsonify({'error': 'This token has already been used.'}), 400
-            
-        expires_at_str = reset_entry['expires_at'].split('.')[0]
-        try:
-            expires_at = datetime.strptime(expires_at_str, "%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            expires_at = datetime.now() # Fallback if error
+        # psycopg2 returns a datetime object directly
+        expires_at = reset_entry['expires_at']
             
         if datetime.now() > expires_at:
             conn.close()
@@ -288,7 +280,7 @@ def do_reset_password():
         print("[DEBUG] Token validated successfully. Updating password...")
         hashed = generate_password_hash(new_password)
         cursor.execute("UPDATE users SET password_hash = %s WHERE id = %s", (hashed, reset_entry['user_id']))
-        cursor.execute("UPDATE password_resets SET used = 1 WHERE token = %s", (token,))
+        cursor.execute("DELETE FROM password_resets WHERE token = %s", (token,))
         conn.commit()
         conn.close()
         
